@@ -4,3 +4,4 @@ resources:
   - GitRepository.yaml
   - HelmRepository.yaml
   - HelmRelease.yaml
+  - secret.yaml
