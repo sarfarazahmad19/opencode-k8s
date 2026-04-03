@@ -1,0 +1,30 @@
+name: updatecli
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  updatecli:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run updatecli
+        uses: updatecli/updatecli-action@v2
+
+      - name: Create Pull Request
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/create-pull-request@v7
+        with:
+          title: 'chore: update traefik version'
+          body: |
+            Updatecli found a new version of traefik helm chart.
+            
+            Please review and merge.
+          branch: updatecli/traefik
+          commit-message: 'chore: update traefik version'

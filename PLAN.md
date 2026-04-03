@@ -69,3 +69,21 @@ kubectl get pods -n traefik
 - `flux/HelmRepository.yaml` - Helm repo source
 - `flux/HelmRelease.yaml` - Traefik release
 - `flux/kustomization.yaml` - Kustomize config
+
+## Step 6: Updatecli (Auto-update)
+Added updatecli for automated Traefik version updates:
+
+| File | Description |
+|------|-------------|
+| `.github/workflows/updatecli.yaml` | GitHub Action workflow |
+| `updatecli.yaml` | updatecli configuration |
+
+## Current Status
+- ✅ Kind cluster `kind` running
+- ✅ FluxCD installed (source, kustomize, helm controllers)
+- ✅ GitRepository reconciled from this git repo
+- ✅ Kustomization applied
+- ✅ HelmRepository + HelmRelease created
+- ✅ Dummy secret created
+- ✅ Traefik deployed (chart v39.0.2)
+- ✅ Updatecli configured for auto-version updates

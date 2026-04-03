@@ -62,6 +62,9 @@ k get svc -n flux-system
 │   ├── secret.yaml             # Dummy secret
 │   ├── flux-kustomization.yaml # Flux Kustomization CRD
 │   └── kustomization.yaml      # Kustomize config
+├── .github/workflows/
+│   └── updatecli.yaml          # GitHub Action for auto-update
+├── updatecli.yaml              # updatecli configuration
 ├── .gitignore
 ├── PLAN.md
 └── README.md
@@ -76,3 +79,19 @@ k get svc -n flux-system
 # View logs
 k logs -n flux-system -l app.kubernetes.io/part-of=flux
 ```
+
+## Updatecli (Auto-update Traefik)
+
+This repo uses [updatecli](https://www.updatecli.io/) to automatically propose PRs for newer Traefik helm chart versions.
+
+### Files
+- `.github/workflows/updatecli.yaml` - GitHub Action workflow
+- `updatecli.yaml` - updatecli configuration
+
+### Usage
+```bash
+# Trigger manually via GitHub Action or:
+updatecli apply --config updatecli.yaml --dry-run
+```
+
+The workflow runs on schedule (weekly) or manually via `workflow_dispatch`. It checks for new Traefik helm chart versions and creates a PR if an update is available.
