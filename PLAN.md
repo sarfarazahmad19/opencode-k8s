@@ -87,3 +87,124 @@ Added updatecli for automated Traefik version updates:
 - ✅ Dummy secret created
 - ✅ Traefik deployed (chart v39.0.2)
 - ✅ Updatecli configured for auto-version updates
+
+---
+
+## Proof of Concept: Breaking Changes (v38 → v39)
+
+### Objective
+Demonstrate that upgrading between Traefik chart versions with breaking changes requires manual values.yaml adjustments.
+
+### Breaking Change Identified
+**Ports Configuration (v38 → v39):** HTTP options now require explicit `http` nesting level (PR #1603)
+
+v38 format:
+```yaml
+ports:
+  web:
+    http:
+      # no nesting needed
+```
+
+v39 format:
+```yaml
+ports:
+  web:
+    http:
+      http:
+        # explicit nesting required
+```
+
+### Execution Steps
+
+1. **Deploy v38.0.2**
+   - Update `flux/HelmRelease.yaml` to version `38.0.2`
+   - Create `flux/values.yaml` with v38-compatible values
+   - Reconcile Flux
+
+2. **Verify v38 deployment**
+
+3. **Upgrade to v39.0.7**
+   - Update version to `39.0.7`
+   - Add breaking change fix to values.yaml (extra `http` nesting)
+   - Reconcile Flux
+
+4. **Document results**
+   - v38 works without changes
+   - v39 upgrade fails without values.yaml fix
+   - v39 upgrade succeeds after applying fix
+
+---
+
+## Automated Testing Pipeline
+
+### Architecture
+
+```
+┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
+│  updatecli PR   │────▶│  Python Poller      │────▶│  GitRepository  │
+│  (label: traefik)│     │  (every 5 min)      │     │  (update branch)│
+└─────────────────┘     └──────────────────────┘     └─────────────────┘
+                                                            │
+                                                            ▼
+                         ┌─────────────────┐     ┌─────────────────┐
+                         │  pytest tests   │◀────│  Flux reconcile │
+                         │  (ingress test) │     │  (auto-trigger) │
+                         └─────────────────┘     └─────────────────┘
+                                │
+                                ▼
+                         ┌─────────────────┐
+                         │  GitHub PR      │
+                         │  (comment only) │
+                         └─────────────────┘
+```
+
+### Execution Flow
+
+1. **updatecli** creates PR with `traefik` label → version bump
+2. **Poller** (every 5 min) detects PR with `traefik` label
+3. **Poller** updates existing `GitRepository` to point to PR branch
+4. **Flux** reconciles automatically → deploys new version
+5. **Poller** runs pytest → verifies Traefik ingress works
+6. **Post PR comment:**
+   - **Dry-run (default):** Just log results
+   - **Normal (--no-dry-run):** Post test results as PR comment
+
+### Execution Modes
+
+| Mode | Command | Behavior |
+|------|---------|----------|
+| **Default (dry-run)** | `python app/main.py` | Polls & logs, no GitHub comment |
+| **K8s Pod** | Runs in cluster | Polls every 5 min, posts to PR |
+| **Local** | `python app/main.py --run-once` | Single run |
+| **Explicit dry-run** | `python app/main.py --dry-run` | Log only, no comment |
+| **Force comment** | `python app/main.py --no-dry-run` | Posts to PR |
+
+### Files to Create
+
+```
+.
+├── app/
+│   ├── main.py              # Poller entrypoint (CLI + scheduler)
+│   ├── poller.py            # GitHub PR polling (every 5 min)
+│   ├── flux.py              # GitRepository/Flux management
+│   ├── config.yaml          # Configuration
+│   ├── requirements.txt    # Python dependencies
+├── tests/
+│   ├── conftest.py         # K8s client fixture
+│   └── test_traefik_ingress.py  # Version-agnostic ingress tests
+├── flux/
+│   └── ...                 # (already exists)
+└── .github/workflows/
+    └── updatecli.yaml      # (already exists)
+```
+
+### Python Dependencies
+```txt
+pygithub
+kubernetes
+pytest
+schedule
+click
+pyyaml
+```

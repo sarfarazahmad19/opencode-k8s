@@ -62,9 +62,20 @@ k get svc -n flux-system
 │   ├── secret.yaml             # Dummy secret
 │   ├── flux-kustomization.yaml # Flux Kustomization CRD
 │   └── kustomization.yaml      # Kustomize config
+├── app/
+│   ├── main.py              # Poller entrypoint
+│   ├── poller.py            # GitHub PR polling
+│   ├── flux.py              # Flux management
+│   ├── config.yaml          # Configuration
+│   ├── requirements.txt    # Python dependencies
+│   └── manifests/
+│       └── deployment.yaml  # K8s deployment
+├── tests/
+│   ├── conftest.py         # K8s client fixture
+│   └── test_traefik_ingress.py  # Ingress tests
 ├── .github/workflows/
-│   └── updatecli.yaml          # GitHub Action for auto-update
-├── updatecli.yaml              # updatecli configuration
+│   └── updatecli.yaml      # GitHub Action for auto-update
+├── updatecli.yaml          # updatecli configuration
 ├── .gitignore
 ├── PLAN.md
 └── README.md
@@ -91,7 +102,83 @@ This repo uses [updatecli](https://www.updatecli.io/) to automatically propose P
 ### Usage
 ```bash
 # Trigger manually via GitHub Action or:
-updatecli apply --config updatecli.yaml --dry-run
+./bin/updatecli apply --config updatecli.yaml --push=false
 ```
 
-The workflow runs on schedule (weekly) or manually via `workflow_dispatch`. It checks for new Traefik helm chart versions and creates a PR if an update is available.
+The workflow runs manually via `workflow_dispatch`. It creates PRs with label `traefik`.
+
+## Traefik Poller (Automated Testing)
+
+Python app that polls GitHub for PRs with label `traefik`, triggers Flux reconciliation, and runs ingress tests.
+
+### Architecture
+
+```
+updatecli PR (label: traefik)
+        ↓
+    Poller (every 5 min)
+        ↓
+    GitRepository → PR branch
+        ↓
+    Flux reconcile
+        ↓
+    pytest tests
+        ↓
+    PR comment (test results)
+```
+
+### Files
+
+```
+app/
+├── main.py              # Poller entrypoint (CLI + scheduler)
+├── poller.py            # GitHub PR polling (every 5 min)
+├── flux.py              # GitRepository/Flux management
+├── config.yaml          # Configuration
+├── requirements.txt    # Python dependencies
+├── manifests/
+│   └── deployment.yaml # K8s deployment manifest
+tests/
+├── conftest.py         # K8s client fixture
+└── test_traefik_ingress.py  # Version-agnostic ingress tests
+```
+
+### Execution Modes
+
+| Mode | Command | Behavior |
+|------|---------|----------|
+| **Default (dry-run)** | `python app/main.py` | Polls & logs, no GitHub comment |
+| **K8s Pod** | `kubectl apply -f app/manifests/` | Polls every 5 min, posts to PR |
+| **Local** | `python app/main.py --run-once` | Single run |
+| **Explicit dry-run** | `python app/main.py --dry-run` | Log only, no comment |
+| **Force comment** | `python app/main.py --no-dry-run` | Posts to PR |
+
+### Running Locally
+
+```bash
+# Install dependencies
+pip install -r app/requirements.txt
+
+# Set GitHub token
+export GITHUB_TOKEN=ghp_xxx
+
+# Run once (dry-run default)
+python app/main.py --run-once
+
+# Run with comments
+python app/main.py --run-once --no-dry-run
+```
+
+### Running in K8s
+
+```bash
+# Create namespace and apply manifests
+kubectl apply -f app/manifests/deployment.yaml
+```
+
+### Tests
+
+The pytest tests are version-agnostic and verify:
+- Traefik pods are Running
+- Traefik service exists
+- Traefik routes traffic to a test app via Ingress

@@ -28,3 +28,4 @@ jobs:
             Please review and merge.
           branch: updatecli/traefik
           commit-message: 'chore: update traefik version'
+          labels: traefik

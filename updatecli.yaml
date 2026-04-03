@@ -18,11 +18,11 @@ sources:
   traefik:
     kind: helmchart
     spec:
-      name: traefik/traefik
+      name: traefik
       url: https://traefik.github.io/charts
       versionfilter:
         kind: semver
-        pattern: "v39.*"
+        pattern: "39.*"
 
 targets:
   update-helmrelease:
@@ -31,3 +31,4 @@ targets:
     spec:
       file: flux/HelmRelease.yaml
       key: $.spec.chart.spec.version
+    source: traefik
