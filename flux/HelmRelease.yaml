@@ -14,7 +14,7 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: traefik
-        namespace: flux-system
+        namespace: traefik
   values:
     deployment:
       replicas: 1
