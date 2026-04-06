@@ -88,10 +88,25 @@ class FluxManager:
                 )
 
                 conditions = kustomization.get("status", {}).get("conditions", [])
+                kustomization_ref = (
+                    kustomization.get("status", {})
+                    .get("artifact", {})
+                    .get("revision", "unknown")
+                )
+                gitrepo = self.custom_objects.get_namespaced_custom_object(
+                    group="source.toolkit.fluxcd.io",
+                    version="v1",
+                    namespace=self.namespace,
+                    plural="gitrepositories",
+                    name=self.gitrepo_name,
+                )
+                branch = gitrepo.get("spec", {}).get("ref", {}).get("branch", "unknown")
                 for cond in conditions:
                     if cond.get("type") == "Ready":
                         if cond.get("status") == "True":
-                            logger.info("Reconciliation succeeded!")
+                            logger.info(
+                                f"Reconciliation succeeded! Branch: {branch}, SHA: {kustomization_ref}"
+                            )
                             return True
                         elif cond.get("status") == "False":
                             logger.error(
@@ -124,3 +139,86 @@ class FluxManager:
         except ApiException as e:
             logger.error(f"Error getting HelmRelease: {e}")
             return None
+
+    def force_helmrelease_reconciliation(self, name="traefik", dry_run=True):
+        logger.info(f"Force reconciling HelmRelease '{name}' (dry_run={dry_run})")
+
+        patch = {"metadata": {"annotations": {"reconcile.fluxcd.io/force": "true"}}}
+
+        if dry_run:
+            logger.info(f"[DRY-RUN] Would patch HelmRelease with: {patch}")
+            return True
+
+        try:
+            self.custom_objects.patch_namespaced_custom_object(
+                group="helm.toolkit.fluxcd.io",
+                version="v2",
+                namespace=self.namespace,
+                plural="helmreleases",
+                name=name,
+                body=patch,
+            )
+            logger.info(
+                f"Successfully triggered force reconcile on HelmRelease '{name}'"
+            )
+            return True
+        except ApiException as e:
+            logger.error(f"Error forcing HelmRelease reconciliation: {e}")
+            return False
+
+    def wait_for_helmrelease_ready(self, name="traefik", timeout_seconds=300):
+        logger.info(
+            f"Waiting for HelmRelease '{name}' to be ready (timeout={timeout_seconds}s)..."
+        )
+
+        start_time = time.time()
+        while time.time() - start_time < timeout_seconds:
+            try:
+                hr = self.custom_objects.get_namespaced_custom_object(
+                    group="helm.toolkit.fluxcd.io",
+                    version="v2",
+                    namespace=self.namespace,
+                    plural="helmreleases",
+                    name=name,
+                )
+
+                conditions = hr.get("status", {}).get("conditions", [])
+                for cond in conditions:
+                    if cond.get("type") == "Ready":
+                        if cond.get("status") == "True":
+                            version = hr.get("status", {}).get(
+                                "lastAppliedRevision", "unknown"
+                            )
+                            logger.info(
+                                f"HelmRelease '{name}' reconciled at version: {version}"
+                            )
+                            return True
+                        elif cond.get("status") == "False":
+                            logger.error(
+                                f"HelmRelease '{name}' reconciliation failed: {cond.get('message')}"
+                            )
+                            return False
+
+                logger.info(f"HelmRelease '{name}' reconciliation in progress...")
+                time.sleep(10)
+
+            except ApiException as e:
+                logger.error(f"Error checking HelmRelease status: {e}")
+                time.sleep(10)
+
+        logger.warning(f"HelmRelease '{name}' reconciliation timeout")
+        return False
+
+    def force_and_wait_helmrelease(self, name="traefik", dry_run=True):
+        logger.info(f"Force and wait for HelmRelease '{name}'")
+
+        success = self.force_helmrelease_reconciliation(name=name, dry_run=dry_run)
+        if not success:
+            logger.error(f"Failed to trigger force reconcile on HelmRelease '{name}'")
+            return False
+
+        if dry_run:
+            logger.info("[DRY-RUN] Skipping wait for HelmRelease")
+            return True
+
+        return self.wait_for_helmrelease_ready(name=name)
