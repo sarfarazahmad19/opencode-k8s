@@ -29,6 +29,7 @@ def load_config(config_path=None):
         return {
             'github_token': os.environ.get('GITHUB_TOKEN'),
             'repo': os.environ.get('REPO', 'sarfarazahmad19/opencode-k8s'),
+            'labels': os.environ.get('LABELS', 'updatecli,traefik').split(','),
             'label': os.environ.get('LABEL', 'traefik'),
             'flux_namespace': os.environ.get('FLUX_NAMESPACE', 'flux-system'),
             'gitrepo_name': os.environ.get('GITREPO_NAME', 'flux-system'),
@@ -40,6 +41,7 @@ def load_config(config_path=None):
         config = yaml.safe_load(f)
     
     config['github_token'] = config.get('github_token') or os.environ.get('GITHUB_TOKEN')
+    config['labels'] = config.get('labels') or os.environ.get('LABELS', 'updatecli,traefik').split(',')
     return config
 
 

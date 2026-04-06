@@ -2,12 +2,12 @@ import os
 import logging
 import time
 import yaml
-from kubernetes import client, config
+from kubernetes import client
+from kubernetes import config as k8s_config
 from kubernetes.client.rest import ApiException
 
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -15,15 +15,15 @@ logger = logging.getLogger(__name__)
 class FluxManager:
     def __init__(self, config):
         self.config = config
-        self.namespace = config.get('flux_namespace', 'flux-system')
-        self.gitrepo_name = config.get('gitrepo_name', 'flux-system')
-        
+        self.namespace = config.get("flux_namespace", "flux-system")
+        self.gitrepo_name = config.get("gitrepo_name", "flux-system")
+
         try:
-            config.load_incluster_config()
+            k8s_config.load_incluster_config()
             logger.info("Loaded in-cluster config")
         except Exception:
             try:
-                config.load_kube_config()
+                k8s_config.load_kube_config()
                 logger.info("Loaded local kubeconfig")
             except Exception as e:
                 logger.error(f"Could not load kube config: {e}")
@@ -33,30 +33,26 @@ class FluxManager:
         self.custom_objects = client.CustomObjectsApi()
 
     def update_gitrepository_branch(self, branch_name, dry_run=True):
-        logger.info(f"Updating GitRepository '{self.gitrepo_name}' to branch '{branch_name}' (dry_run={dry_run})")
-        
+        logger.info(
+            f"Updating GitRepository '{self.gitrepo_name}' to branch '{branch_name}' (dry_run={dry_run})"
+        )
+
         try:
             gitrepo = self.custom_objects.get_namespaced_custom_object(
                 group="source.toolkit.fluxcd.io",
                 version="v1",
                 namespace=self.namespace,
                 plural="gitrepositories",
-                name=self.gitrepo_name
+                name=self.gitrepo_name,
             )
         except ApiException as e:
             logger.error(f"Error getting GitRepository: {e}")
             return False
 
-        current_ref = gitrepo.get('spec', {}).get('ref', {})
+        current_ref = gitrepo.get("spec", {}).get("ref", {})
         logger.info(f"Current ref: {current_ref}")
 
-        patch = {
-            'spec': {
-                'ref': {
-                    'branch': branch_name
-                }
-            }
-        }
+        patch = {"spec": {"ref": {"branch": branch_name}}}
 
         if dry_run:
             logger.info(f"[DRY-RUN] Would patch GitRepository with: {patch}")
@@ -69,7 +65,7 @@ class FluxManager:
                 namespace=self.namespace,
                 plural="gitrepositories",
                 name=self.gitrepo_name,
-                body=patch
+                body=patch,
             )
             logger.info(f"Successfully updated GitRepository to branch '{branch_name}'")
             return True
@@ -79,7 +75,7 @@ class FluxManager:
 
     def wait_for_reconciliation(self, timeout_seconds=300):
         logger.info(f"Waiting for Flux reconciliation (timeout={timeout_seconds}s)...")
-        
+
         start_time = time.time()
         while time.time() - start_time < timeout_seconds:
             try:
@@ -88,26 +84,28 @@ class FluxManager:
                     version="v1",
                     namespace=self.namespace,
                     plural="kustomizations",
-                    name=self.gitrepo_name
+                    name=self.gitrepo_name,
                 )
-                
-                conditions = kustomization.get('status', {}).get('conditions', [])
+
+                conditions = kustomization.get("status", {}).get("conditions", [])
                 for cond in conditions:
-                    if cond.get('type') == 'Ready':
-                        if cond.get('status') == 'True':
+                    if cond.get("type") == "Ready":
+                        if cond.get("status") == "True":
                             logger.info("Reconciliation succeeded!")
                             return True
-                        elif cond.get('status') == 'False':
-                            logger.error(f"Reconciliation failed: {cond.get('message')}")
+                        elif cond.get("status") == "False":
+                            logger.error(
+                                f"Reconciliation failed: {cond.get('message')}"
+                            )
                             return False
-                
+
                 logger.info("Reconciliation in progress...")
                 time.sleep(10)
-                
+
             except ApiException as e:
                 logger.error(f"Error checking reconciliation: {e}")
                 time.sleep(10)
-        
+
         logger.warning("Reconciliation timeout")
         return False
 
@@ -118,9 +116,9 @@ class FluxManager:
                 version="v2",
                 namespace=self.namespace,
                 plural="helmreleases",
-                name="traefik"
+                name="traefik",
             )
-            version = hr.get('spec', {}).get('chart', {}).get('spec', {}).get('version')
+            version = hr.get("spec", {}).get("chart", {}).get("spec", {}).get("version")
             logger.info(f"Current Traefik version: {version}")
             return version
         except ApiException as e:

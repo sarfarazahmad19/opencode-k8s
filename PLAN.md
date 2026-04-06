@@ -78,6 +78,14 @@ Added updatecli for automated Traefik version updates:
 | `.github/workflows/updatecli.yaml` | GitHub Action workflow |
 | `updatecli.yaml` | updatecli configuration |
 
+### updatecli Configuration
+- `scms`: Defines GitHub connection (token, repo, branch)
+- `scmid`: Creates commits/PRs using the SCM
+  - `pullRequest`: PR title, body, labels
+  - `commitmessage`: Commit message template
+- `sources`: Fetches Traefik chart versions (semver filter `39.*`)
+- `targets`: Updates HelmRelease.yaml with new version
+
 ## Current Status
 - ✅ Kind cluster `kind` running
 - ✅ FluxCD installed (source, kustomize, helm controllers)
@@ -174,37 +182,68 @@ ports:
 
 | Mode | Command | Behavior |
 |------|---------|----------|
-| **Default (dry-run)** | `python app/main.py` | Polls & logs, no GitHub comment |
+| **Default (dry-run)** | `uv run python main.py` | Polls & logs, no GitHub comment |
 | **K8s Pod** | Runs in cluster | Polls every 5 min, posts to PR |
-| **Local** | `python app/main.py --run-once` | Single run |
-| **Explicit dry-run** | `python app/main.py --dry-run` | Log only, no comment |
-| **Force comment** | `python app/main.py --no-dry-run` | Posts to PR |
+| **Local** | `uv run python main.py --run-once` | Single run |
+| **Explicit dry-run** | `uv run python main.py --dry-run` | Log only, no comment |
+| **Force comment** | `uv run python main.py --no-dry-run --run-once` | Posts to PR |
 
-### Files to Create
+### Files Created
 
 ```
 .
 ├── app/
 │   ├── main.py              # Poller entrypoint (CLI + scheduler)
-│   ├── poller.py            # GitHub PR polling (every 5 min)
+│   ├── poller.py            # GitHub PR polling (multi-label support)
 │   ├── flux.py              # GitRepository/Flux management
-│   ├── config.yaml          # Configuration
-│   ├── requirements.txt    # Python dependencies
+│   ├── config.yaml          # Configuration (labels: updatecli, traefik)
+│   ├── pyproject.toml       # UV Python project config
+│   ├── requirements.txt     # Python dependencies (legacy)
+│   ├── .venv/               # UV virtual environment
 ├── tests/
 │   ├── conftest.py         # K8s client fixture
 │   └── test_traefik_ingress.py  # Version-agnostic ingress tests
 ├── flux/
 │   └── ...                 # (already exists)
-└── .github/workflows/
-    └── updatecli.yaml      # (already exists)
+├── .github/workflows/
+│   └── updatecli.yaml      # (already exists)
+└── updatecli.yaml          # updatecli config with scmid + PR
 ```
 
-### Python Dependencies
-```txt
-pygithub
-kubernetes
-pytest
-schedule
-click
-pyyaml
+### Python Dependencies (UV)
+
+#### Using UV (Recommended)
+```bash
+cd app
+uv sync
+uv run python main.py --run-once
+uv run python main.py --no-dry-run --run-once
 ```
+
+#### Using requirements.txt (Legacy)
+```bash
+pip install -r app/requirements.txt
+python app/main.py --run-once
+```
+
+| Dependency | Purpose |
+|------------|---------|
+| pygithub | GitHub API client |
+| kubernetes | K8s client for Flux |
+| pytest | Testing framework |
+| schedule | Job scheduling |
+| click | CLI framework |
+| pyyaml | Config parsing |
+
+### Multi-Label Polling
+
+The poller filters PRs that have **both** `updatecli` AND `traefik` labels (AND logic):
+
+```yaml
+# app/config.yaml
+labels:
+  - updatecli
+  - traefik
+```
+
+This ensures only updatecli-created PRs for Traefik are processed.
