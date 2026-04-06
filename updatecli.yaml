@@ -14,6 +14,18 @@ scms:
       email: sarfarazahmad19@gmail.com
       token: '{{ .github.token }}'
 
+scmid:
+  github:
+    scm: github
+    branch: main
+    commitmessage: Update Traefik Helm Chart to {{ source "traefik" }}
+    pullRequest:
+      title: 'Update Traefik Helm Chart to {{ source "traefik" }}'
+      body: 'Updatecli found a new version of traefik helm chart. Please review and merge.'
+      labels:
+        - traefik
+        - dependencies
+
 sources:
   traefik:
     kind: helmchart
@@ -32,3 +44,4 @@ targets:
       file: flux/HelmRelease.yaml
       key: $.spec.chart.spec.version
     source: traefik
+    scmid: github
