@@ -5,7 +5,6 @@ import yaml
 from kubernetes import client
 
 
-@pytest.mark.dependency(depends=["test_helmrelease_reconciled"])
 def test_traefik_pods_running(traefik_pods):
     """Verify Traefik pods are Running"""
     assert len(traefik_pods) > 0, "No Traefik pods found"
@@ -18,7 +17,6 @@ def test_traefik_pods_running(traefik_pods):
     print(f"[CHECK] {len(traefik_pods)} Traefik pod(s) are Running and healthy")
 
 
-@pytest.mark.dependency(depends=["test_helmrelease_reconciled"])
 def test_traefik_service_exists(traefik_service):
     """Verify Traefik service exists"""
     assert traefik_service is not None, "Traefik service not found"
@@ -29,7 +27,6 @@ def test_traefik_service_exists(traefik_service):
     )
 
 
-@pytest.mark.dependency(depends=["test_helmrelease_reconciled"])
 def test_traefik_responds(core_v1, namespace):
     """Verify Traefik responds to requests by deploying a test app with Ingress"""
 
@@ -180,7 +177,6 @@ def test_traefik_responds(core_v1, namespace):
         #     pass
 
 
-@pytest.mark.dependency(depends=["test_helmrelease_reconciled"])
 def test_traefik_has_ingress_class(core_v1, namespace):
     """Verify Traefik has IngressClass configured"""
     networking_v1 = client.NetworkingV1Api()

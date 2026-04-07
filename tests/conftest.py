@@ -1,14 +1,36 @@
 import os
 import pytest
+import subprocess
 import yaml
 from kubernetes import client, config
+
+
+@pytest.fixture(scope="session", autouse=True)
+def sync_helmrelease():
+    """Force sync HelmRelease before tests run - fire and forget"""
+    try:
+        subprocess.run(
+            [
+                "./bin/flux",
+                "reconcile",
+                "helmrelease",
+                "traefik",
+                "-n",
+                "traefik",
+                "--force",
+            ],
+            capture_output=True,
+            timeout=60,
+        )
+    except Exception:
+        pass  # Fire and forget - let tests determine actual state
 
 
 def pytest_addoption(parser):
     parser.addoption(
         "--namespace",
         action="store",
-        default="flux-system",
+        default="traefik",
         help="Namespace where Traefik is deployed",
     )
     parser.addoption(

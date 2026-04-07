@@ -2,6 +2,7 @@ import pytest
 from kubernetes import client
 
 
+@pytest.mark.dependency(scope="session")
 def test_helmrelease_reconciled(
     custom_objects, helmrelease_name="traefik", helmrelease_namespace="traefik"
 ):
