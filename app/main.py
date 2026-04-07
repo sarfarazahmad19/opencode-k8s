@@ -67,6 +67,7 @@ def run_tests(config):
             "--tb=short",
             "--color=yes",
             "-s",
+            "--dependency-mode=hard",
             f"--namespace={namespace}",
             f"--helmrelease-namespace=traefik",
             test_dir,

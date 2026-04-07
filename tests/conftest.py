@@ -4,10 +4,6 @@ import yaml
 from kubernetes import client, config
 
 
-def pytest_configure(config):
-    config.addinivalue_line("markers", "depends: mark test to depend on another test")
-
-
 def pytest_addoption(parser):
     parser.addoption(
         "--namespace",
