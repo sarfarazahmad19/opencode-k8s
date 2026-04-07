@@ -4,12 +4,25 @@ import yaml
 from kubernetes import client, config
 
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "depends: mark test to depend on another test")
+
+
 def pytest_addoption(parser):
     parser.addoption(
         "--namespace",
         action="store",
         default="flux-system",
-        help="Namespace where Traefik is deployed"
+        help="Namespace where Traefik is deployed",
+    )
+    parser.addoption(
+        "--helmrelease", action="store", default="traefik", help="HelmRelease name"
+    )
+    parser.addoption(
+        "--helmrelease-namespace",
+        action="store",
+        default="traefik",
+        help="HelmRelease namespace",
     )
 
 
@@ -22,7 +35,7 @@ def kubeconfig():
             config.load_kube_config()
         except Exception as e:
             pytest.skip(f"Could not load kubeconfig: {e}")
-    
+
     return config
 
 
@@ -42,6 +55,16 @@ def namespace(request):
 
 
 @pytest.fixture(scope="session")
+def helmrelease_name(request):
+    return request.config.getoption("--helmrelease")
+
+
+@pytest.fixture(scope="session")
+def helmrelease_namespace(request):
+    return request.config.getoption("--helmrelease-namespace")
+
+
+@pytest.fixture(scope="session")
 def traefik_service(core_v1, namespace):
     """Get Traefik service"""
     try:
@@ -56,7 +79,6 @@ def traefik_service(core_v1, namespace):
 def traefik_pods(core_v1, namespace):
     """Get Traefik pods"""
     pods = core_v1.list_namespaced_pod(
-        namespace=namespace,
-        label_selector="app.kubernetes.io/name=traefik"
+        namespace=namespace, label_selector="app.kubernetes.io/name=traefik"
     )
     return pods.items

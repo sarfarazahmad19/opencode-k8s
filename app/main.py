@@ -6,13 +6,15 @@ import schedule
 import yaml
 import click
 import subprocess
+import signal
 from datetime import datetime
 
 from poller import Poller
 from flux import FluxManager
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -54,12 +56,21 @@ def run_tests(config):
     test_dir = os.path.join(os.path.dirname(__file__), "..", "tests")
     if not os.path.exists(test_dir):
         logger.error(f"Tests directory not found: {test_dir}")
-        return False
+        return {"success": False, "output": "", "test_results": []}
 
     namespace = config.get("test_namespace", "flux-system")
 
     result = subprocess.run(
-        ["pytest", "-v", "--tb=short", f"--namespace={namespace}", test_dir],
+        [
+            "pytest",
+            "-v",
+            "--tb=short",
+            "--color=yes",
+            "-s",
+            f"--namespace={namespace}",
+            f"--helmrelease-namespace=traefik",
+            test_dir,
+        ],
         capture_output=True,
         text=True,
     )
@@ -68,7 +79,21 @@ def run_tests(config):
     if result.stderr:
         logger.warning(f"Pytest stderr:\n{result.stderr}")
 
-    return result.returncode == 0
+    test_results = parse_pytest_output(result.stdout)
+    return {
+        "success": result.returncode == 0,
+        "output": result.stdout,
+        "test_results": test_results,
+    }
+
+
+def parse_pytest_output(output):
+    results = []
+    lines = output.split("\n")
+    for line in lines:
+        if "[CHECK]" in line:
+            results.append({"description": line.split("[CHECK]")[1].strip()})
+    return results
 
 
 def post_comment_to_pr(github, repo, pr_number, body):
@@ -80,20 +105,24 @@ def post_comment_to_pr(github, repo, pr_number, body):
         logger.error(f"Error posting comment: {e}")
 
 
-def format_test_results(success, version_from, version_to, test_output):
+def format_test_results(success, branch, test_results, test_output):
     status = "✅ All tests passed" if success else "❌ Tests failed"
+
+    test_lines = []
+    for test in test_results:
+        icon = "✅"
+        test_lines.append(f"{icon} {test['description']}")
+
+    test_summary = "\n".join(test_lines) if test_lines else "No test results"
 
     body = f"""## Traefik Upgrade Test Results {status}
 
-**Version:** {version_from} → {version_to}
+**Branch:** `{branch}`
 
 **Timestamp:** {datetime.now().isoformat()}
 
-```
-{test_output}
-```
-
-**Status:** {"All tests passed" if success else "Tests failed"}
+### Test Results
+{test_summary}
 """
     return body
 
@@ -131,25 +160,24 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=True):
                 "Kustomization reconciliation failed after retry, continuing anyway..."
             )
 
-        logger.info("Force reconciling HelmRelease...")
-        helmrelease_ready = flux_manager.force_and_wait_helmrelease(dry_run=False)
+        logger.info("Waiting for HelmRelease to reconcile...")
+        helmrelease_ready = flux_manager.wait_for_helmrelease_ready(dry_run=False)
         if not helmrelease_ready:
             logger.warning("HelmRelease reconciliation failed, retrying once...")
-            helmrelease_ready = flux_manager.force_and_wait_helmrelease(dry_run=False)
+            helmrelease_ready = flux_manager.wait_for_helmrelease_ready(dry_run=False)
 
         if not helmrelease_ready:
             logger.error(
                 "HelmRelease reconciliation failed after retry, continuing anyway..."
             )
 
-        version_to = flux_manager.get_current_version()
-
-        test_success = run_tests(config)
-
-        test_output = f"Version after upgrade: {version_to}"
+        test_result = run_tests(config)
 
         comment_body = format_test_results(
-            test_success, version_from, version_to, test_output
+            test_result["success"],
+            branch,
+            test_result["test_results"],
+            test_result["output"],
         )
         logger.info(f"[DRY-RUN] Would post comment to PR #{pr_number}:\n{comment_body}")
     else:
@@ -171,28 +199,27 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=True):
                 "Kustomization reconciliation failed after retry, continuing anyway..."
             )
 
-        logger.info("Force reconciling HelmRelease...")
-        helmrelease_ready = flux_manager.force_and_wait_helmrelease(dry_run=False)
+        logger.info("Waiting for HelmRelease to reconcile...")
+        helmrelease_ready = flux_manager.wait_for_helmrelease_ready(dry_run=False)
         if not helmrelease_ready:
             logger.warning("HelmRelease reconciliation failed, retrying once...")
-            helmrelease_ready = flux_manager.force_and_wait_helmrelease(dry_run=False)
+            helmrelease_ready = flux_manager.wait_for_helmrelease_ready(dry_run=False)
 
         if not helmrelease_ready:
             logger.error(
                 "HelmRelease reconciliation failed after retry, continuing anyway..."
             )
 
-        version_to = flux_manager.get_current_version()
-
-        test_success = run_tests(config)
-
-        test_output = f"Version after upgrade: {version_to}"
+        test_result = run_tests(config)
 
         github = poller.github
         repo = poller.repo
 
         comment_body = format_test_results(
-            test_success, version_from, version_to, test_output
+            test_result["success"],
+            branch,
+            test_result["test_results"],
+            test_result["output"],
         )
         post_comment_to_pr(github, repo, pr_number, comment_body)
 
@@ -221,6 +248,19 @@ def run_poll(config):
     logger.info("Poll cycle complete")
     logger.info("=" * 50)
 
+    return flux_manager
+
+
+flux_manager_global = None
+config_global = None
+
+
+# def signal_handler(signum, frame):
+#     logger.info("Received Ctrl+C, reverting GitRepository to main branch...")
+#     if flux_manager_global:
+#         flux_manager_global.revert_to_main()
+#     sys.exit(0)
+
 
 @click.command()
 @click.option("--config", "-c", default=DEFAULT_CONFIG_PATH, help="Path to config file")
@@ -232,9 +272,14 @@ def run_poll(config):
     "--interval", "-i", default=300, help="Poll interval in seconds (default: 300)"
 )
 def main(config, run_once, dry_run, interval):
+    # signal.signal(signal.SIGINT, signal_handler)
+
     config_data = load_config(config)
     config_data["dry_run"] = dry_run
     config_data["poll_interval"] = interval
+
+    global flux_manager_global, config_global
+    config_global = config_data
 
     logger.info(f"Starting Traefik Poller")
     logger.info(f"  Config: {config}")
@@ -243,9 +288,9 @@ def main(config, run_once, dry_run, interval):
     logger.info(f"  Interval: {interval}s")
 
     if run_once:
-        run_poll(config_data)
+        flux_manager_global = run_poll(config_data)
     else:
-        run_poll(config_data)
+        flux_manager_global = run_poll(config_data)
 
         schedule.every(interval).seconds.do(run_poll, config=config_data)
 

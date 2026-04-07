@@ -6,5 +6,6 @@ labels:
 label: "traefik"
 flux_namespace: "flux-system"
 gitrepo_name: "flux-system"
-test_namespace: "flux-system"
+helmrelease_namespace: "traefik"
+test_namespace: "traefik"
 poll_interval: 300
