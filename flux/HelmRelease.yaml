@@ -22,6 +22,7 @@ spec:
       type: ClusterIP
     ports:
       web:
-        http:
-          redirectTo:
-            port: websecure
+        redirections:
+          entryPoint:
+            to: websecure
+            scheme: https
