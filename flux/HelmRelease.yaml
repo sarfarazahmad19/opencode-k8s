@@ -20,3 +20,8 @@ spec:
       replicas: 1
     service:
       type: ClusterIP
+    ports:
+      web:
+        http:
+          redirectTo:
+            port: websecure
