@@ -4,6 +4,9 @@ github-token
 # Binaries
 bin/
 
+# Beads
+.beads/
+
 # Python .gitignore
 __pycache__/
 *.py[cod]
