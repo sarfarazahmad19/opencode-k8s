@@ -1,5 +1,6 @@
 # GitHub token
 github-token
+.github-token
 
 # Binaries
 bin/

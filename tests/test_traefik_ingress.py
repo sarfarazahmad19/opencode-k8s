@@ -5,6 +5,11 @@ import yaml
 from kubernetes import client
 
 
+pytestmark = pytest.mark.dependency(
+    depends=["test_helmrelease.py::test_helmrelease_reconciled"]
+)
+
+
 def test_traefik_pods_running(traefik_pods):
     """Verify Traefik pods are Running"""
     assert len(traefik_pods) > 0, "No Traefik pods found"

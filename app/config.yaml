@@ -1,5 +1,7 @@
 github_token: ""
 repo: "sarfarazahmad19/opencode-k8s"
+repo_path: "/datadrive/home/ahmad/git/opencode-k8s"
+ssh_key_path: "/root/.ssh/id_rsa"
 labels:
   - updatecli
   - traefik

@@ -7,10 +7,13 @@ import yaml
 import click
 import subprocess
 import signal
+import tempfile
+import shutil
 from datetime import datetime
 
 from poller import Poller
 from flux import FluxManager
+from goal_writer import write_goal
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,7 +70,7 @@ def run_tests(config):
             "--tb=short",
             "--color=yes",
             "-s",
-            "--dependency-mode=hard",
+            "--ignore-unknown-dependency",
             f"--namespace={namespace}",
             f"--helmrelease-namespace=traefik",
             test_dir,
@@ -172,15 +175,30 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=True):
                 "HelmRelease reconciliation failed after retry, continuing anyway..."
             )
 
-        test_result = run_tests(config)
-
-        comment_body = format_test_results(
-            test_result["success"],
-            branch,
-            test_result["test_results"],
-            test_result["output"],
-        )
-        logger.info(f"[DRY-RUN] Would post comment to PR #{pr_number}:\n{comment_body}")
+        logger.info("Running opencode run...")
+        tempdir = tempfile.mkdtemp(prefix="opencode_")
+        try:
+            target_version = flux_manager.get_current_version()
+            goal_path = write_goal(
+                tempdir=tempdir,
+                pr_branch=branch,
+                target_version=target_version or "unknown",
+                helmrelease_namespace=config.get("helmrelease_namespace", "traefik"),
+                helmrelease_name="traefik",
+                flux_namespace=config.get("flux_namespace", "flux-system"),
+                gitrepo_name=config.get("gitrepo_name", "flux-system"),
+                repo_path=config.get("repo_path"),
+                ssh_key_path=config.get("ssh_key_path"),
+            )
+            result = subprocess.run(
+                ["opencode", "run", f"Work per the instructions in {goal_path}"],
+                cwd=tempdir,
+                timeout=300,
+            )
+            logger.info(f"opencode run finished with exit code {result.returncode}")
+            logger.info(f"[DRY-RUN] opencode run completed for PR #{pr_number}")
+        finally:
+            shutil.rmtree(tempdir)
     else:
         success = flux_manager.update_gitrepository_branch(branch, dry_run=False)
         if not success:
@@ -211,18 +229,29 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=True):
                 "HelmRelease reconciliation failed after retry, continuing anyway..."
             )
 
-        test_result = run_tests(config)
-
-        github = poller.github
-        repo = poller.repo
-
-        comment_body = format_test_results(
-            test_result["success"],
-            branch,
-            test_result["test_results"],
-            test_result["output"],
-        )
-        post_comment_to_pr(github, repo, pr_number, comment_body)
+        logger.info("Running opencode run...")
+        tempdir = tempfile.mkdtemp(prefix="opencode_")
+        try:
+            target_version = flux_manager.get_current_version()
+            goal_path = write_goal(
+                tempdir=tempdir,
+                pr_branch=branch,
+                target_version=target_version or "unknown",
+                helmrelease_namespace=config.get("helmrelease_namespace", "traefik"),
+                helmrelease_name="traefik",
+                flux_namespace=config.get("flux_namespace", "flux-system"),
+                gitrepo_name=config.get("gitrepo_name", "flux-system"),
+                repo_path=config.get("repo_path"),
+                ssh_key_path=config.get("ssh_key_path"),
+            )
+            result = subprocess.run(
+                ["opencode", "run", f"Work per the instructions in {goal_path}"],
+                cwd=tempdir,
+                timeout=300,
+            )
+            logger.info(f"opencode run finished with exit code {result.returncode}")
+        finally:
+            shutil.rmtree(tempdir)
 
     poller.mark_pr_processed(pr_number)
 

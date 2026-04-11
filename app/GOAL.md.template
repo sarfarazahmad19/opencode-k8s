@@ -1,0 +1,25 @@
+# Goal: Fix Traefik HelmRelease values and verify tests pass
+
+## Context
+- PR branch: {pr_branch}
+- Target version: {target_version}
+- HelmRelease: {helmrelease_name} in namespace {helmrelease_namespace}
+- Kustomization: {gitrepo_name} in namespace {flux_namespace}
+- Git repo path: {repo_path}
+- SSH key path: {ssh_key_path}
+
+## Test Command
+uv run pytest tests/ --namespace=traefik --helmrelease-namespace=traefik
+
+## Workflow
+1. Check HelmRelease status, wait if reconciling
+2. Run tests: if fail, continue
+3. Fix flux/HelmRelease.yaml values if needed
+4. Commit fix to branch {pr_branch}, push (use SSH key)
+5. Force reconcile:
+   - Kustomization: patch with {{"reconcile.fluxcd.io/force": "true"}}
+   - HelmRelease: patch with {{"reconcile.fluxcd.io/force": "true"}}
+6. Wait for HelmRelease Ready=True
+7. Re-run tests to verify
+8. Write results to app/logs/opencode_result.json with format:
+   {{"success": true/false, "version": "x.y.z", "test_output": "..."}}

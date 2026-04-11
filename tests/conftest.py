@@ -9,7 +9,7 @@ from kubernetes import client, config
 def sync_helmrelease():
     """Force sync HelmRelease before tests run - fire and forget"""
     try:
-        subprocess.run(
+        subprocess.Popen(
             [
                 "./bin/flux",
                 "reconcile",
@@ -19,11 +19,11 @@ def sync_helmrelease():
                 "traefik",
                 "--force",
             ],
-            capture_output=True,
-            timeout=60,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
     except Exception:
-        pass  # Fire and forget - let tests determine actual state
+        pass
 
 
 def pytest_addoption(parser):
