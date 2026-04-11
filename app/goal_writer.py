@@ -12,6 +12,7 @@ def write_goal(
     flux_namespace: str,
     gitrepo_name: str,
     repo_path: str,
+    repo_url: str,
     ssh_key_path: str,
     k8s_context: str,
 ) -> str:
@@ -30,6 +31,7 @@ def write_goal(
         gitrepo_name=gitrepo_name,
         flux_namespace=flux_namespace,
         repo_path=repo_path,
+        repo_url=repo_url,
         ssh_key_path=ssh_key_path,
         k8s_context=k8s_context,
     )

@@ -182,6 +182,7 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=True):
             k8s_context = subprocess.check_output(
                 ["kubectl", "config", "current-context"], text=True
             ).strip()
+            repo_url = f"git@github.com:{config.get('repo')}.git"
             goal_path = write_goal(
                 tempdir=tempdir,
                 software_name="traefik",
@@ -193,6 +194,7 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=True):
                 flux_namespace=config.get("flux_namespace", "flux-system"),
                 gitrepo_name=config.get("gitrepo_name", "flux-system"),
                 repo_path=config.get("repo_path"),
+                repo_url=repo_url,
                 ssh_key_path=config.get("ssh_key_path"),
                 k8s_context=k8s_context,
             )
@@ -248,6 +250,7 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=True):
             k8s_context = subprocess.check_output(
                 ["kubectl", "config", "current-context"], text=True
             ).strip()
+            repo_url = f"git@github.com:{config.get('repo')}.git"
             goal_path = write_goal(
                 tempdir=tempdir,
                 software_name="traefik",
@@ -259,6 +262,7 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=True):
                 flux_namespace=config.get("flux_namespace", "flux-system"),
                 gitrepo_name=config.get("gitrepo_name", "flux-system"),
                 repo_path=config.get("repo_path"),
+                repo_url=repo_url,
                 ssh_key_path=config.get("ssh_key_path"),
                 k8s_context=k8s_context,
             )
