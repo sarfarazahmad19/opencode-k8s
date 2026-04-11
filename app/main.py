@@ -179,8 +179,13 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=True):
         tempdir = tempfile.mkdtemp(prefix="opencode_")
         try:
             target_version = flux_manager.get_current_version()
+            k8s_context = subprocess.check_output(
+                ["kubectl", "config", "current-context"], text=True
+            ).strip()
             goal_path = write_goal(
                 tempdir=tempdir,
+                software_name="traefik",
+                current_version=version_from or "unknown",
                 pr_branch=branch,
                 target_version=target_version or "unknown",
                 helmrelease_namespace=config.get("helmrelease_namespace", "traefik"),
@@ -189,9 +194,16 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=True):
                 gitrepo_name=config.get("gitrepo_name", "flux-system"),
                 repo_path=config.get("repo_path"),
                 ssh_key_path=config.get("ssh_key_path"),
+                k8s_context=k8s_context,
             )
             result = subprocess.run(
-                ["opencode", "run", f"Work per the instructions in {goal_path}"],
+                [
+                    "opencode",
+                    "run",
+                    "-m",
+                    "opencode/big-pickle",
+                    f"Work per the instructions in {goal_path}",
+                ],
                 cwd=tempdir,
                 timeout=300,
             )
@@ -233,8 +245,13 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=True):
         tempdir = tempfile.mkdtemp(prefix="opencode_")
         try:
             target_version = flux_manager.get_current_version()
+            k8s_context = subprocess.check_output(
+                ["kubectl", "config", "current-context"], text=True
+            ).strip()
             goal_path = write_goal(
                 tempdir=tempdir,
+                software_name="traefik",
+                current_version=version_from or "unknown",
                 pr_branch=branch,
                 target_version=target_version or "unknown",
                 helmrelease_namespace=config.get("helmrelease_namespace", "traefik"),
@@ -243,9 +260,16 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=True):
                 gitrepo_name=config.get("gitrepo_name", "flux-system"),
                 repo_path=config.get("repo_path"),
                 ssh_key_path=config.get("ssh_key_path"),
+                k8s_context=k8s_context,
             )
             result = subprocess.run(
-                ["opencode", "run", f"Work per the instructions in {goal_path}"],
+                [
+                    "opencode",
+                    "run",
+                    "-m",
+                    "opencode/big-pickle",
+                    f"Work per the instructions in {goal_path}",
+                ],
                 cwd=tempdir,
                 timeout=300,
             )

@@ -1,12 +1,27 @@
-# Goal: Fix Traefik HelmRelease values and verify tests pass
+## Variables
+- software_name: traefik
+- current_version: 38.0.2
+- target_version: 39.0.7
+- pr_branch: updatecli-traefik-39.0.7
+- helmrelease_name: traefik
+- helmrelease_namespace: traefik
+- gitrepo_name: flux-system
+- flux_namespace: flux-system
+- repo_path: /datadrive/home/ahmad/git/opencode-k8s
+- ssh_key_path: /home/ahmads/.ssh/id_rsa
+- k8s_context: kind-flux-cluster
 
 ## Context
+- Software: traefik
+- Current (from) version: 38.0.2
+- Target (to) version: 39.0.7
 - PR branch: updatecli-traefik-39.0.7
-- Target version: 39.0.7
 - HelmRelease: traefik in namespace traefik
 - Kustomization: flux-system in namespace flux-system
 - Git repo path: /datadrive/home/ahmad/git/opencode-k8s
 - SSH key path: /home/ahmads/.ssh/id_rsa
+- Kubernetes context: kind-flux-cluster
+- Test coverage: All functionality is covered by the test suite in tests/
 
 ## Test Command
 uv run pytest tests/ --namespace=traefik --helmrelease-namespace=traefik
@@ -14,7 +29,7 @@ uv run pytest tests/ --namespace=traefik --helmrelease-namespace=traefik
 ## Workflow
 1. Check HelmRelease status, wait if reconciling
 2. Run tests: if fail, continue
-3. Fix flux/HelmRelease.yaml values if needed
+3. Fix flux/HelmRelease.yaml values if needed. You need to make sure the change to values.yaml does not strip away any enabled features.
 4. Commit fix to branch updatecli-traefik-39.0.7, push (use SSH key)
 5. Force reconcile:
    - Kustomization: patch with {"reconcile.fluxcd.io/force": "true"}

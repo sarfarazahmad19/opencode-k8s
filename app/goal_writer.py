@@ -3,6 +3,8 @@ import os
 
 def write_goal(
     tempdir: str,
+    software_name: str,
+    current_version: str,
     pr_branch: str,
     target_version: str,
     helmrelease_namespace: str,
@@ -11,6 +13,7 @@ def write_goal(
     gitrepo_name: str,
     repo_path: str,
     ssh_key_path: str,
+    k8s_context: str,
 ) -> str:
     template_path = os.path.join(os.path.dirname(__file__), "GOAL.md.template")
 
@@ -18,6 +21,8 @@ def write_goal(
         template = f.read()
 
     content = template.format(
+        software_name=software_name,
+        current_version=current_version,
         pr_branch=pr_branch,
         target_version=target_version,
         helmrelease_name=helmrelease_name,
@@ -26,6 +31,7 @@ def write_goal(
         flux_namespace=flux_namespace,
         repo_path=repo_path,
         ssh_key_path=ssh_key_path,
+        k8s_context=k8s_context,
     )
 
     goal_path = os.path.join(tempdir, "GOAL.md")
