@@ -2,7 +2,7 @@
 - software_name: traefik
 - current_version: 38.0.2
 - target_version: 39.0.7
-- pr_branch: updatecli-traefik-39.0.7
+- pr_branch: updatecli_main_25cae498eee0a0f01f59966ddce3cf228aa546404e37b9f9f67411da612957f1
 - helmrelease_name: traefik
 - helmrelease_namespace: traefik
 - gitrepo_name: flux-system
