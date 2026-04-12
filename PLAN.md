@@ -247,3 +247,37 @@ labels:
 ```
 
 This ensures only updatecli-created PRs for Traefik are processed.
+
+---
+
+## Version Detection Fixes
+
+### Problem
+When running with `--no-opencode-run`, target version was incorrectly reported as the current version (e.g., 38.0.2 instead of 39.0.7). This was due to a race condition where `get_current_version()` was called before Flux had actually attempted the new version.
+
+### Root Cause
+- `get_current_version()` used `.spec.chart.spec.version` - the target version from the spec
+- But after updating GitRepository, the HelmRelease spec hasn't been updated yet
+- `status.lastAttemptedRevision` might still show the old version during reconciliation
+
+### Solution: Wait for Generation Increment
+
+1. **Track generation before update**: Added `get_current_version_with_generation()` method that returns `(version, lastAttemptedGeneration)` tuple
+
+2. **Wait for generation to increment**: Added `wait_for_generation_increment()` method that polls until `status.lastAttemptedGeneration` increments from the previous value
+
+3. **Enhanced logging**: Now logs generation in all key places:
+   - `get_current_version()` - logs `gen=`, `status=`, `spec=`
+   - `wait_for_helmrelease_ready()` - logs `gen=`
+   - `fix_helmrelease_with_ai()` - logs `gen=`
+
+### Code Changes
+
+**app/flux.py**:
+- `get_current_version()`: Uses `status.lastAttemptedRevision` first, falls back to `spec.chart.spec.version`
+- `get_current_version_with_generation()`: Returns tuple with version + generation
+- `wait_for_generation_increment()`: Waits for generation to increment
+
+**app/main.py**:
+- Uses `get_current_version_with_generation()` to capture generation before update
+- Calls `wait_for_generation_increment()` after reconciliation, before getting target version
