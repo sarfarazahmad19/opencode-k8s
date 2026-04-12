@@ -14,6 +14,7 @@ from datetime import datetime
 from poller import Poller
 from flux import FluxManager
 from goal_writer import write_goal
+from runner import run_before_tests, run_after_tests, post_results_to_pr
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,53 +52,6 @@ def load_config(config_path=None):
         "LABELS", "updatecli,traefik"
     ).split(",")
     return config
-
-
-def run_tests(config):
-    logger.info("Running pytest tests...")
-
-    test_dir = os.path.join(os.path.dirname(__file__), "..", "tests")
-    if not os.path.exists(test_dir):
-        logger.error(f"Tests directory not found: {test_dir}")
-        return {"success": False, "output": "", "test_results": []}
-
-    namespace = config.get("test_namespace", "flux-system")
-
-    result = subprocess.run(
-        [
-            "pytest",
-            "-v",
-            "--tb=short",
-            "--color=yes",
-            "-s",
-            "--ignore-unknown-dependency",
-            f"--namespace={namespace}",
-            f"--helmrelease-namespace=traefik",
-            test_dir,
-        ],
-        capture_output=True,
-        text=True,
-    )
-
-    logger.info(f"Pytest output:\n{result.stdout}")
-    if result.stderr:
-        logger.warning(f"Pytest stderr:\n{result.stderr}")
-
-    test_results = parse_pytest_output(result.stdout)
-    return {
-        "success": result.returncode == 0,
-        "output": result.stdout,
-        "test_results": test_results,
-    }
-
-
-def parse_pytest_output(output):
-    results = []
-    lines = output.split("\n")
-    for line in lines:
-        if "[CHECK]" in line:
-            results.append({"description": line.split("[CHECK]")[1].strip()})
-    return results
 
 
 def post_comment_to_pr(github, repo, pr_number, body):
@@ -144,6 +98,14 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=False):
         logger.error("Could not get current version")
         return
 
+    logger.info("Running before tests to verify current state...")
+    before_result = run_before_tests(config)
+    if not before_result["success"]:
+        logger.warning("Before tests failed, continuing anyway...")
+
+    if not dry_run and config.get("github_token"):
+        post_results_to_pr(html_url, before_result, version=version_from)
+
     if dry_run:
         logger.info(f"[DRY-RUN] Updating GitRepository to branch '{branch}'")
 
@@ -187,6 +149,7 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=False):
             software_name="traefik",
             current_version=version_from or "unknown",
             pr_branch=branch,
+            pr_url=html_url,
             target_version=target_version or "unknown",
             helmrelease_namespace=config.get("helmrelease_namespace", "traefik"),
             helmrelease_name="traefik",
@@ -198,6 +161,11 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=False):
             k8s_context=k8s_context,
             dry_run="true" if dry_run else "false",
         )
+        env = os.environ.copy()
+        env["GITHUB_TOKEN"] = config.get("github_token") or os.environ.get(
+            "GITHUB_TOKEN", ""
+        )
+        env["REPO"] = config.get("repo", "sarfarazahmad19/opencode-k8s")
         result = subprocess.run(
             [
                 "opencode",
@@ -209,6 +177,7 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=False):
                 f"Work per the instructions in {goal_path}",
             ],
             cwd=tempdir,
+            env=env,
             timeout=600,
         )
         logger.info(f"opencode run finished with exit code {result.returncode}")

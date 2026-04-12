@@ -3,6 +3,7 @@
 - current_version: {current_version}
 - target_version: {target_version}
 - pr_branch: {pr_branch}
+- pr_url: {pr_url}
 - helmrelease_name: {helmrelease_name}
 - helmrelease_namespace: {helmrelease_namespace}
 - gitrepo_name: {gitrepo_name}
@@ -18,6 +19,7 @@
 - Current (from) version: {current_version}
 - Target (to) version: {target_version}
 - PR branch: {pr_branch}
+- PR URL: {pr_url}
 - HelmRelease: {helmrelease_name} in namespace {helmrelease_namespace}
 - Kustomization: {gitrepo_name} in namespace {flux_namespace}
 - Git repo path: {repo_path}
@@ -27,7 +29,7 @@
 - Test coverage: All functionality is covered by the test suite in tests/
 
 ## Test Command
-uv run pytest tests/ --namespace=traefik --helmrelease-namespace=traefik
+uv run pytest tests/ --namespace=traefik --helmrelease-namespace=traefik --ignore-unknown-dependency
 
 ## Workflow
 <!-- Step 0 disabled - reconciliation is already handled by the app before opencode runs
@@ -44,12 +46,13 @@ uv run pytest tests/ --namespace=traefik --helmrelease-namespace=traefik
 6. If dry_run is true, do NOT commit or push. Just log what changes would be made.
 7. If dry_run is false, commit and push:
    - git add flux/HelmRelease.yaml
-   - git commit -m "fix: migrate values for {software_name} {target_version}"
+   - git commit -m "fix: migrate values for {software_name} {target_version} (upstream: {pr_url})"
    - git push origin {pr_branch} (use SSH key at {ssh_key_path})
 8. If dry_run is false, force reconcile:
    - Kustomization: kubectl annotate kustomization {gitrepo_name} -n {flux_namespace} reconcile.fluxcd.io/force=true --overwrite --context {k8s_context}
    - HelmRelease: kubectl annotate helmrelease {helmrelease_name} -n {helmrelease_namespace} reconcile.fluxcd.io/force=true --overwrite --context {k8s_context}
-9. If dry_run is false, wait up to 30 seconds for HelmRelease Ready=True
-10. If dry_run is false, re-run tests to verify
-11. Write results to app/logs/opencode_result.json with format:
+ 9. If dry_run is false, wait up to 30 seconds for HelmRelease Ready=True
+10. If dry_run is false, run after tests to verify upgrade was successful: uv run python -m runner run-after-tests
+11. If dry_run is false, post test results to GitHub PR: uv run python -m runner post-results --pr-url {pr_url} --version {target_version}
+12. Write results to app/logs/opencode_result.json with format:
    {{"success": true/false, "version": "x.y.z", "test_output": "..."}}
