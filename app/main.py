@@ -136,53 +136,54 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=False):
             "HelmRelease reconciliation failed after retry, continuing anyway..."
         )
 
-    logger.info("Running opencode run...")
-    tempdir = tempfile.mkdtemp(prefix="opencode_")
-    try:
-        target_version = flux_manager.get_current_version()
-        k8s_context = subprocess.check_output(
-            ["kubectl", "config", "current-context"], text=True
-        ).strip()
-        repo_url = f"git@github.com:{config.get('repo')}.git"
-        goal_path = write_goal(
-            tempdir=tempdir,
-            software_name="traefik",
-            current_version=version_from or "unknown",
-            pr_branch=branch,
-            pr_url=html_url,
-            target_version=target_version or "unknown",
-            helmrelease_namespace=config.get("helmrelease_namespace", "traefik"),
-            helmrelease_name="traefik",
-            flux_namespace=config.get("flux_namespace", "flux-system"),
-            gitrepo_name=config.get("gitrepo_name", "flux-system"),
-            repo_path=config.get("repo_path"),
-            repo_url=repo_url,
-            ssh_key_path=config.get("ssh_key_path"),
-            k8s_context=k8s_context,
-            dry_run="true" if dry_run else "false",
-        )
-        env = os.environ.copy()
-        env["GITHUB_TOKEN"] = config.get("github_token") or os.environ.get(
-            "GITHUB_TOKEN", ""
-        )
-        env["REPO"] = config.get("repo", "sarfarazahmad19/opencode-k8s")
-        result = subprocess.run(
-            [
-                "opencode",
-                "run",
-                "--dangerously-skip-permissions",
-                "true",
-                "-m",
-                "opencode/big-pickle",
-                f"Work per the instructions in {goal_path}",
-            ],
-            cwd=tempdir,
-            env=env,
-            timeout=600,
-        )
-        logger.info(f"opencode run finished with exit code {result.returncode}")
-    finally:
-        shutil.rmtree(tempdir)
+    if not config.get("no_opencode_run"):
+        logger.info("Running opencode run...")
+        tempdir = tempfile.mkdtemp(prefix="opencode_")
+        try:
+            target_version = flux_manager.get_current_version()
+            k8s_context = subprocess.check_output(
+                ["kubectl", "config", "current-context"], text=True
+            ).strip()
+            repo_url = f"git@github.com:{config.get('repo')}.git"
+            goal_path = write_goal(
+                tempdir=tempdir,
+                software_name="traefik",
+                current_version=version_from or "unknown",
+                pr_branch=branch,
+                pr_url=html_url,
+                target_version=target_version or "unknown",
+                helmrelease_namespace=config.get("helmrelease_namespace", "traefik"),
+                helmrelease_name="traefik",
+                flux_namespace=config.get("flux_namespace", "flux-system"),
+                gitrepo_name=config.get("gitrepo_name", "flux-system"),
+                repo_path=config.get("repo_path"),
+                repo_url=repo_url,
+                ssh_key_path=config.get("ssh_key_path"),
+                k8s_context=k8s_context,
+                dry_run="true" if dry_run else "false",
+            )
+            env = os.environ.copy()
+            env["GITHUB_TOKEN"] = config.get("github_token") or os.environ.get(
+                "GITHUB_TOKEN", ""
+            )
+            env["REPO"] = config.get("repo", "sarfarazahmad19/opencode-k8s")
+            result = subprocess.run(
+                [
+                    "opencode",
+                    "run",
+                    "--dangerously-skip-permissions",
+                    "true",
+                    "-m",
+                    "opencode/big-pickle",
+                    f"Work per the instructions in {goal_path}",
+                ],
+                cwd=tempdir,
+                env=env,
+                timeout=600,
+            )
+            logger.info(f"opencode run finished with exit code {result.returncode}")
+        finally:
+            shutil.rmtree(tempdir)
 
     poller.mark_pr_processed(pr_number)
 
@@ -220,14 +221,17 @@ def main():
     parser.add_argument("--run-once", action="store_true")
     parser.add_argument("--dry-run", action="store_true", default=False)
     parser.add_argument("--interval", type=int, default=300)
+    parser.add_argument("--no-opencode-run", action="store_true", default=False)
     args = parser.parse_args()
 
     config_data = load_config(args.config)
     config_data["dry_run"] = args.dry_run
+    config_data["no_opencode_run"] = args.no_opencode_run
 
     logger.info(f"Starting Traefik Poller")
     logger.info(f"  Config: {args.config}")
     logger.info(f"  Dry-run: {args.dry_run}")
+    logger.info(f"  No opencode run: {args.no_opencode_run}")
     logger.info(f"  Run-once: {args.run_once}")
     logger.info(f"  Interval: {args.interval}s")
 

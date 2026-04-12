@@ -3,7 +3,6 @@ import subprocess
 import logging
 import yaml
 import json
-import click
 from github import Github
 
 logger = logging.getLogger(__name__)
@@ -140,37 +139,3 @@ def post_results_to_pr(pr_url, test_result=None, version=None):
     except Exception as e:
         logger.error(f"Failed to post to PR: {e}")
         return False
-
-
-@click.command()
-@click.argument(
-    "command",
-    type=click.Choice(["run-before-tests", "run-after-tests", "post-results"]),
-)
-@click.option("--config", default=DEFAULT_CONFIG_PATH)
-@click.option("--pr-url", help="PR URL for posting results")
-@click.option("--version", help="Version being tested")
-def main(command, config, pr_url, version):
-    """Test runner for Traefik upgrade pipeline."""
-    cfg = load_config(config)
-
-    if command == "run-before-tests":
-        result = run_before_tests(cfg)
-    elif command == "run-after-tests":
-        result = run_after_tests(cfg)
-    elif command == "post-results":
-        if not pr_url:
-            logger.error("--pr-url required for post-results")
-            return
-        post_results_to_pr(pr_url, version=version)
-        return
-
-    if result["success"]:
-        logger.info("Tests passed!")
-    else:
-        logger.error("Tests failed!")
-        logger.info(f"Output: {result['output']}")
-
-
-if __name__ == "__main__":
-    main()

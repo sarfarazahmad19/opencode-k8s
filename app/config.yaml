@@ -11,3 +11,4 @@ gitrepo_name: "flux-system"
 helmrelease_namespace: "traefik"
 test_namespace: "traefik"
 poll_interval: 300
+no_opencode_run: false
