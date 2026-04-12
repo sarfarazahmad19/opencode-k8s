@@ -209,7 +209,7 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=False):
                 f"Work per the instructions in {goal_path}",
             ],
             cwd=tempdir,
-            timeout=300,
+            timeout=600,
         )
         logger.info(f"opencode run finished with exit code {result.returncode}")
     finally:
