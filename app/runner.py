@@ -51,6 +51,7 @@ def run_tests(config):
         ],
         capture_output=True,
         text=True,
+        env=os.environ.copy(),
     )
 
     logger.info(f"Pytest output:\n{result.stdout}")
@@ -93,6 +94,9 @@ def parse_pytest_output(output):
 
 def post_results_to_pr(pr_url, test_result=None, version=None):
     """Post test results to GitHub PR."""
+    # GITHUB_TOKEN: GitHub Personal Access Token
+    # - Set via environment variable GITHUB_TOKEN
+    # - Or source .github-token file in workdir: source .github-token
     github_token = os.environ.get("GITHUB_TOKEN")
     if not github_token:
         logger.error("GITHUB_TOKEN not set - cannot post to PR")
