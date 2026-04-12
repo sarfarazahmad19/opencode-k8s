@@ -176,12 +176,43 @@ class FluxManager:
                 plural="helmreleases",
                 name="traefik",
             )
-            version = hr.get("spec", {}).get("chart", {}).get("spec", {}).get("version")
-            logger.info(f"Current Traefik version: {version}")
+            generation = hr.get("metadata", {}).get("generation", 1)
+            status_version = hr.get("status", {}).get("lastAttemptedRevision")
+            spec_version = (
+                hr.get("spec", {}).get("chart", {}).get("spec", {}).get("version")
+            )
+            version = status_version or spec_version
+            logger.info(
+                f"Current Traefik version: {version} (gen={generation}, status={status_version}, spec={spec_version})"
+            )
             return version
         except ApiException as e:
             logger.error(f"Error getting HelmRelease: {e}")
             return None
+
+    def get_current_version_with_generation(self):
+        """Returns (version, lastAttemptedGeneration) tuple."""
+        try:
+            hr = self.custom_objects.get_namespaced_custom_object(
+                group="helm.toolkit.fluxcd.io",
+                version="v2",
+                namespace=self.helmrelease_namespace,
+                plural="helmreleases",
+                name="traefik",
+            )
+            generation = hr.get("status", {}).get("lastAttemptedGeneration", 1)
+            status_version = hr.get("status", {}).get("lastAttemptedRevision")
+            spec_version = (
+                hr.get("spec", {}).get("chart", {}).get("spec", {}).get("version")
+            )
+            version = status_version or spec_version
+            logger.info(
+                f"Current version: {version} (lastAttemptedGen={generation}, status={status_version}, spec={spec_version})"
+            )
+            return version, generation
+        except ApiException as e:
+            logger.error(f"Error getting HelmRelease: {e}")
+            return None, None
 
     def wait_for_helmrelease_ready(
         self, name="traefik", dry_run=True, timeout_seconds=300
@@ -212,8 +243,9 @@ class FluxManager:
                             version = hr.get("status", {}).get(
                                 "lastAttemptedRevision", "unknown"
                             )
+                            generation = hr.get("metadata", {}).get("generation", 1)
                             logger.info(
-                                f"HelmRelease '{name}' reconciled at version: {version}"
+                                f"HelmRelease '{name}' reconciled at version: {version} (gen={generation})"
                             )
                             return True
                         elif cond.get("status") == "False":
@@ -230,6 +262,37 @@ class FluxManager:
                 time.sleep(10)
 
         logger.warning(f"HelmRelease '{name}' reconciliation timeout")
+        return False
+
+    def wait_for_generation_increment(
+        self, previous_gen, timeout_seconds=60, name="traefik"
+    ):
+        """Wait for lastAttemptedGeneration to increment from previous value."""
+        logger.info(
+            f"Waiting for lastAttemptedGeneration to increment from {previous_gen}..."
+        )
+        start_time = time.time()
+        while time.time() - start_time < timeout_seconds:
+            try:
+                hr = self.custom_objects.get_namespaced_custom_object(
+                    group="helm.toolkit.fluxcd.io",
+                    version="v2",
+                    namespace=self.helmrelease_namespace,
+                    plural="helmreleases",
+                    name=name,
+                )
+                current_gen = hr.get("status", {}).get("lastAttemptedGeneration", 0)
+                if current_gen > previous_gen:
+                    logger.info(
+                        f"Generation incremented: {previous_gen} -> {current_gen}"
+                    )
+                    return True
+                logger.info(f"Waiting for generation... (current={current_gen})")
+                time.sleep(5)
+            except ApiException as e:
+                logger.error(f"Error checking generation: {e}")
+                time.sleep(5)
+        logger.warning("Generation increment timeout")
         return False
 
     def force_helmrelease_reconciliation(self, name="traefik"):
@@ -286,7 +349,8 @@ class FluxManager:
 
             if ready and ready.get("status") == "True":
                 version = hr.get("status", {}).get("lastAttemptedRevision", "unknown")
-                return True, f"HelmRelease Ready (version {version})"
+                generation = hr.get("metadata", {}).get("generation", 1)
+                return True, f"HelmRelease Ready (version {version}, gen={generation})"
 
             error_msg = (
                 ready.get("message", "Unknown error") if ready else "No Ready condition"

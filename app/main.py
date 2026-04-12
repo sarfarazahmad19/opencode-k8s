@@ -93,7 +93,7 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=False):
 
     logger.info(f"Processing PR #{pr_number} - Branch: {branch}")
 
-    version_from = flux_manager.get_current_version()
+    version_from, gen_from = flux_manager.get_current_version_with_generation()
     if not version_from:
         logger.error("Could not get current version")
         return
@@ -141,6 +141,9 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=False):
         )
 
     flux_manager.force_helmrelease_reconciliation()
+
+    logger.info("Waiting for generation to increment...")
+    flux_manager.wait_for_generation_increment(gen_from)
 
     target_version = flux_manager.get_current_version()
     k8s_context = subprocess.check_output(
