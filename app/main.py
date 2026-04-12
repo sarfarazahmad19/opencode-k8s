@@ -114,6 +114,8 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=False):
         logger.error("Failed to update GitRepository")
         return
 
+    flux_manager.force_gitrepository_reconcile()
+
     logger.info("Waiting for Kustomization to reconcile...")
     kustomization_ready = flux_manager.wait_for_reconciliation(timeout_seconds=300)
     if not kustomization_ready:
@@ -124,6 +126,8 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=False):
         logger.error(
             "Kustomization reconciliation failed after retry, continuing anyway..."
         )
+
+    flux_manager.force_kustomization_reconcile()
 
     logger.info("Waiting for HelmRelease to reconcile...")
     helmrelease_ready = flux_manager.wait_for_helmrelease_ready(dry_run=False)
@@ -136,54 +140,70 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=False):
             "HelmRelease reconciliation failed after retry, continuing anyway..."
         )
 
-    if not config.get("no_opencode_run"):
-        logger.info("Running opencode run...")
-        tempdir = tempfile.mkdtemp(prefix="opencode_")
-        try:
-            target_version = flux_manager.get_current_version()
-            k8s_context = subprocess.check_output(
-                ["kubectl", "config", "current-context"], text=True
-            ).strip()
-            repo_url = f"git@github.com:{config.get('repo')}.git"
-            goal_path = write_goal(
-                tempdir=tempdir,
-                software_name="traefik",
-                current_version=version_from or "unknown",
-                pr_branch=branch,
-                pr_url=html_url,
-                target_version=target_version or "unknown",
-                helmrelease_namespace=config.get("helmrelease_namespace", "traefik"),
-                helmrelease_name="traefik",
-                flux_namespace=config.get("flux_namespace", "flux-system"),
-                gitrepo_name=config.get("gitrepo_name", "flux-system"),
-                repo_path=config.get("repo_path"),
-                repo_url=repo_url,
-                ssh_key_path=config.get("ssh_key_path"),
-                k8s_context=k8s_context,
-                dry_run="true" if dry_run else "false",
-            )
-            env = os.environ.copy()
-            env["GITHUB_TOKEN"] = config.get("github_token") or os.environ.get(
-                "GITHUB_TOKEN", ""
-            )
-            env["REPO"] = config.get("repo", "sarfarazahmad19/opencode-k8s")
-            result = subprocess.run(
-                [
-                    "opencode",
-                    "run",
-                    "--dangerously-skip-permissions",
-                    "true",
-                    "-m",
-                    "opencode/big-pickle",
-                    f"Work per the instructions in {goal_path}",
-                ],
-                cwd=tempdir,
-                env=env,
-                timeout=600,
-            )
-            logger.info(f"opencode run finished with exit code {result.returncode}")
-        finally:
-            shutil.rmtree(tempdir)
+    flux_manager.force_helmrelease_reconciliation()
+
+    target_version = flux_manager.get_current_version()
+    k8s_context = subprocess.check_output(
+        ["kubectl", "config", "current-context"], text=True
+    ).strip()
+    repo_url = f"git@github.com:{config.get('repo')}.git"
+
+    goal_tempdir = (
+        tempfile.mkdtemp(prefix="opencode_goal_")
+        if not config.get("no_opencode_run")
+        else "/tmp"
+    )
+    goal_path = write_goal(
+        tempdir=goal_tempdir,
+        software_name="traefik",
+        current_version=version_from or "unknown",
+        pr_branch=branch,
+        pr_url=html_url,
+        target_version=target_version or "unknown",
+        helmrelease_namespace=config.get("helmrelease_namespace", "traefik"),
+        helmrelease_name="traefik",
+        flux_namespace=config.get("flux_namespace", "flux-system"),
+        gitrepo_name=config.get("gitrepo_name", "flux-system"),
+        repo_path=config.get("repo_path"),
+        repo_url=repo_url,
+        ssh_key_path=config.get("ssh_key_path"),
+        k8s_context=k8s_context,
+        dry_run="true" if dry_run else "false",
+    )
+
+    if config.get("no_opencode_run"):
+        logger.info("=== GOAL.md ===")
+        with open(goal_path, "r") as f:
+            print(f.read())
+        logger.info("=== END GOAL.md ===")
+        poller.mark_pr_processed(pr_number)
+        return
+
+    logger.info("Running opencode run...")
+    tempdir = tempfile.mkdtemp(prefix="opencode_")
+    try:
+        env = os.environ.copy()
+        env["GITHUB_TOKEN"] = config.get("github_token") or os.environ.get(
+            "GITHUB_TOKEN", ""
+        )
+        env["REPO"] = config.get("repo", "sarfarazahmad19/opencode-k8s")
+        result = subprocess.run(
+            [
+                "opencode",
+                "run",
+                "--dangerously-skip-permissions",
+                "true",
+                "-m",
+                "opencode/big-pickle",
+                f"Work per the instructions in {goal_path}",
+            ],
+            cwd=tempdir,
+            env=env,
+            timeout=600,
+        )
+        logger.info(f"opencode run finished with exit code {result.returncode}")
+    finally:
+        shutil.rmtree(tempdir)
 
     poller.mark_pr_processed(pr_number)
 

@@ -75,6 +75,46 @@ class FluxManager:
             logger.error(f"Error patching GitRepository: {e}")
             return False
 
+    def force_gitrepository_reconcile(self):
+        logger.info(f"Force reconciling GitRepository '{self.gitrepo_name}'")
+        patch = {"metadata": {"annotations": {"reconcile.fluxcd.io/force": "true"}}}
+        try:
+            self.custom_objects.patch_namespaced_custom_object(
+                group="source.toolkit.fluxcd.io",
+                version="v1",
+                namespace=self.namespace,
+                plural="gitrepositories",
+                name=self.gitrepo_name,
+                body=patch,
+            )
+            logger.info(
+                f"Successfully forced reconcile GitRepository '{self.gitrepo_name}'"
+            )
+            return True
+        except ApiException as e:
+            logger.error(f"Error forcing GitRepository reconcile: {e}")
+            return False
+
+    def force_kustomization_reconcile(self):
+        logger.info(f"Force reconciling Kustomization '{self.gitrepo_name}'")
+        patch = {"metadata": {"annotations": {"reconcile.fluxcd.io/force": "true"}}}
+        try:
+            self.custom_objects.patch_namespaced_custom_object(
+                group="kustomize.toolkit.fluxcd.io",
+                version="v1",
+                namespace=self.namespace,
+                plural="kustomizations",
+                name=self.gitrepo_name,
+                body=patch,
+            )
+            logger.info(
+                f"Successfully forced reconcile Kustomization '{self.gitrepo_name}'"
+            )
+            return True
+        except ApiException as e:
+            logger.error(f"Error forcing Kustomization reconcile: {e}")
+            return False
+
     def wait_for_reconciliation(self, timeout_seconds=300):
         logger.info(f"Waiting for Flux reconciliation (timeout={timeout_seconds}s)...")
 
