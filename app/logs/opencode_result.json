@@ -1,1 +1,1 @@
-{"success": true, "version": "38.0.2", "test_output": "5 passed in 12.40s"}
+{"success": true, "version": "39.0.7", "test_output": "5 passed in 12.83s - test_helmrelease_reconciled PASSED, test_traefik_pods_running PASSED, test_traefik_service_exists PASSED, test_traefik_responds PASSED, test_traefik_has_ingress_class PASSED"}

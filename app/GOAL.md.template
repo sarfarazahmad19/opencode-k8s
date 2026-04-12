@@ -45,14 +45,22 @@ uv run pytest tests/ --namespace=traefik --helmrelease-namespace=traefik --ignor
 5. Migrate the values in flux/HelmRelease.yaml to be compatible with version {target_version}. Make sure not to disable any features that are currently enabled in the existing values.
 6. If dry_run is true, do NOT commit or push. Just log what changes would be made.
 7. If dry_run is false, commit and push:
-   - git add flux/HelmRelease.yaml
-   - git commit -m "fix: migrate values for {software_name} {target_version} (upstream: {pr_url})"
-   - git push origin {pr_branch} (use SSH key at {ssh_key_path})
+    - Write a detailed commit message summarizing your findings:
+      - Breaking changes found: <list of breaking changes from changelog research>
+      - Values migrated: <specific values changed and why>
+      - Testing done: <commands run and results>
+    - git add flux/HelmRelease.yaml
+    - git commit -m "<detailed summary of decision making and fact finding>"
+    - git push origin {pr_branch} (use SSH key at {ssh_key_path})
 8. If dry_run is false, force reconcile:
    - Kustomization: kubectl annotate kustomization {gitrepo_name} -n {flux_namespace} reconcile.fluxcd.io/force=true --overwrite --context {k8s_context}
    - HelmRelease: kubectl annotate helmrelease {helmrelease_name} -n {helmrelease_namespace} reconcile.fluxcd.io/force=true --overwrite --context {k8s_context}
  9. If dry_run is false, wait up to 30 seconds for HelmRelease Ready=True
-10. If dry_run is false, run after tests to verify upgrade was successful: uv run python -m runner run-after-tests
-11. If dry_run is false, post test results to GitHub PR: uv run python -m runner post-results --pr-url {pr_url} --version {target_version}
+10. If dry_run is false, run after tests to verify upgrade was successful: 
+    - First source GitHub token if needed: if [ -z "$GITHUB_TOKEN" ] && [ -f .github-token ]; then source .github-token; fi
+    - Then run: uv run python app/runner.py run-after-tests
+11. If dry_run is false, post test results to GitHub PR:
+    - First source GitHub token if needed: if [ -z "$GITHUB_TOKEN" ] && [ -f .github-token ]; then source .github-token; fi
+    - Then run: uv run python app/runner.py post-results --pr-url {pr_url} --version {target_version}
 12. Write results to app/logs/opencode_result.json with format:
    {{"success": true/false, "version": "x.y.z", "test_output": "..."}}

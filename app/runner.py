@@ -3,6 +3,7 @@ import subprocess
 import logging
 import yaml
 import json
+import argparse
 from github import Github
 
 logger = logging.getLogger(__name__)
@@ -139,3 +140,23 @@ def post_results_to_pr(pr_url, test_result=None, version=None):
     except Exception as e:
         logger.error(f"Failed to post to PR: {e}")
         return False
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Test runner for Traefik")
+    parser.add_argument("command", choices=["run-after-tests", "post-results"])
+    parser.add_argument("--pr-url", help="PR URL")
+    parser.add_argument("--version", help="Target version")
+    args = parser.parse_args()
+
+    config = load_config()
+
+    if args.command == "run-after-tests":
+        result = run_after_tests(config)
+        print(json.dumps(result))
+    elif args.command == "post-results":
+        post_results_to_pr(args.pr_url, None, args.version)
+
+
+if __name__ == "__main__":
+    main()
