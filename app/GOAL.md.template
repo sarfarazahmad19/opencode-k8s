@@ -30,6 +30,10 @@
 uv run pytest tests/ --namespace=traefik --helmrelease-namespace=traefik
 
 ## Workflow
+0. Before starting, verify HelmRelease has reconciled to the latest git commit in {pr_branch}:
+   - Get latest commit SHA: git ls-remote origin {pr_branch} | awk '{print $1}'
+   - Wait up to 120 seconds for HelmRelease's lastAttemptedRevision to match: kubectl get helmrelease {helmrelease_name} -n {helmrelease_namespace} --context {k8s_context} -o jsonpath='{.status.lastAttemptedRevision}' until it matches SHA
+   - Note: Do NOT require Ready=True condition, only revision match
 1. Create a temporary directory for work
 2. Clone the repository fresh: git clone {repo_url} workdir
 3. Checkout {pr_branch} (create if doesn't exist: git checkout -b {pr_branch})

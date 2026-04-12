@@ -4,7 +4,7 @@ import logging
 import time
 import schedule
 import yaml
-import click
+import argparse
 import subprocess
 import signal
 import tempfile
@@ -131,7 +131,7 @@ def format_test_results(success, branch, test_results, test_output):
     return body
 
 
-def process_pr(pr_info, config, flux_manager, poller, dry_run=True):
+def process_pr(pr_info, config, flux_manager, poller, dry_run=False):
     pr_number = pr_info["number"]
     branch = pr_info["head_branch"]
     sha = pr_info["head_sha"]
@@ -146,140 +146,74 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=True):
 
     if dry_run:
         logger.info(f"[DRY-RUN] Updating GitRepository to branch '{branch}'")
-        success = flux_manager.update_gitrepository_branch(branch, dry_run=False)
-        if not success:
-            logger.error("Failed to update GitRepository")
-            return
 
-        logger.info("Waiting for Kustomization to reconcile...")
+    success = flux_manager.update_gitrepository_branch(branch, dry_run=False)
+    if not success:
+        logger.error("Failed to update GitRepository")
+        return
+
+    logger.info("Waiting for Kustomization to reconcile...")
+    kustomization_ready = flux_manager.wait_for_reconciliation(timeout_seconds=300)
+    if not kustomization_ready:
+        logger.warning("Kustomization reconciliation failed, retrying once...")
         kustomization_ready = flux_manager.wait_for_reconciliation(timeout_seconds=300)
-        if not kustomization_ready:
-            logger.warning("Kustomization reconciliation failed, retrying once...")
-            kustomization_ready = flux_manager.wait_for_reconciliation(
-                timeout_seconds=300
-            )
 
-        if not kustomization_ready:
-            logger.error(
-                "Kustomization reconciliation failed after retry, continuing anyway..."
-            )
+    if not kustomization_ready:
+        logger.error(
+            "Kustomization reconciliation failed after retry, continuing anyway..."
+        )
 
-        logger.info("Waiting for HelmRelease to reconcile...")
+    logger.info("Waiting for HelmRelease to reconcile...")
+    helmrelease_ready = flux_manager.wait_for_helmrelease_ready(dry_run=False)
+    if not helmrelease_ready:
+        logger.warning("HelmRelease reconciliation failed, retrying once...")
         helmrelease_ready = flux_manager.wait_for_helmrelease_ready(dry_run=False)
-        if not helmrelease_ready:
-            logger.warning("HelmRelease reconciliation failed, retrying once...")
-            helmrelease_ready = flux_manager.wait_for_helmrelease_ready(dry_run=False)
 
-        if not helmrelease_ready:
-            logger.error(
-                "HelmRelease reconciliation failed after retry, continuing anyway..."
-            )
+    if not helmrelease_ready:
+        logger.error(
+            "HelmRelease reconciliation failed after retry, continuing anyway..."
+        )
 
-        logger.info("Running opencode run...")
-        tempdir = tempfile.mkdtemp(prefix="opencode_")
-        try:
-            target_version = flux_manager.get_current_version()
-            k8s_context = subprocess.check_output(
-                ["kubectl", "config", "current-context"], text=True
-            ).strip()
-            repo_url = f"git@github.com:{config.get('repo')}.git"
-            goal_path = write_goal(
-                tempdir=tempdir,
-                software_name="traefik",
-                current_version=version_from or "unknown",
-                pr_branch=branch,
-                target_version=target_version or "unknown",
-                helmrelease_namespace=config.get("helmrelease_namespace", "traefik"),
-                helmrelease_name="traefik",
-                flux_namespace=config.get("flux_namespace", "flux-system"),
-                gitrepo_name=config.get("gitrepo_name", "flux-system"),
-                repo_path=config.get("repo_path"),
-                repo_url=repo_url,
-                ssh_key_path=config.get("ssh_key_path"),
-                k8s_context=k8s_context,
-            )
-            result = subprocess.run(
-                [
-                    "opencode",
-                    "run",
-                    "-m",
-                    "opencode/big-pickle",
-                    f"Work per the instructions in {goal_path}",
-                ],
-                cwd=tempdir,
-                timeout=300,
-            )
-            logger.info(f"opencode run finished with exit code {result.returncode}")
-            logger.info(f"[DRY-RUN] opencode run completed for PR #{pr_number}")
-        finally:
-            shutil.rmtree(tempdir)
-    else:
-        success = flux_manager.update_gitrepository_branch(branch, dry_run=False)
-        if not success:
-            logger.error("Failed to update GitRepository")
-            return
-
-        logger.info("Waiting for Kustomization to reconcile...")
-        kustomization_ready = flux_manager.wait_for_reconciliation(timeout_seconds=300)
-        if not kustomization_ready:
-            logger.warning("Kustomization reconciliation failed, retrying once...")
-            kustomization_ready = flux_manager.wait_for_reconciliation(
-                timeout_seconds=300
-            )
-
-        if not kustomization_ready:
-            logger.error(
-                "Kustomization reconciliation failed after retry, continuing anyway..."
-            )
-
-        logger.info("Waiting for HelmRelease to reconcile...")
-        helmrelease_ready = flux_manager.wait_for_helmrelease_ready(dry_run=False)
-        if not helmrelease_ready:
-            logger.warning("HelmRelease reconciliation failed, retrying once...")
-            helmrelease_ready = flux_manager.wait_for_helmrelease_ready(dry_run=False)
-
-        if not helmrelease_ready:
-            logger.error(
-                "HelmRelease reconciliation failed after retry, continuing anyway..."
-            )
-
-        logger.info("Running opencode run...")
-        tempdir = tempfile.mkdtemp(prefix="opencode_")
-        try:
-            target_version = flux_manager.get_current_version()
-            k8s_context = subprocess.check_output(
-                ["kubectl", "config", "current-context"], text=True
-            ).strip()
-            repo_url = f"git@github.com:{config.get('repo')}.git"
-            goal_path = write_goal(
-                tempdir=tempdir,
-                software_name="traefik",
-                current_version=version_from or "unknown",
-                pr_branch=branch,
-                target_version=target_version or "unknown",
-                helmrelease_namespace=config.get("helmrelease_namespace", "traefik"),
-                helmrelease_name="traefik",
-                flux_namespace=config.get("flux_namespace", "flux-system"),
-                gitrepo_name=config.get("gitrepo_name", "flux-system"),
-                repo_path=config.get("repo_path"),
-                repo_url=repo_url,
-                ssh_key_path=config.get("ssh_key_path"),
-                k8s_context=k8s_context,
-            )
-            result = subprocess.run(
-                [
-                    "opencode",
-                    "run",
-                    "-m",
-                    "opencode/big-pickle",
-                    f"Work per the instructions in {goal_path}",
-                ],
-                cwd=tempdir,
-                timeout=300,
-            )
-            logger.info(f"opencode run finished with exit code {result.returncode}")
-        finally:
-            shutil.rmtree(tempdir)
+    logger.info("Running opencode run...")
+    tempdir = tempfile.mkdtemp(prefix="opencode_")
+    try:
+        target_version = flux_manager.get_current_version()
+        k8s_context = subprocess.check_output(
+            ["kubectl", "config", "current-context"], text=True
+        ).strip()
+        repo_url = f"git@github.com:{config.get('repo')}.git"
+        goal_path = write_goal(
+            tempdir=tempdir,
+            software_name="traefik",
+            current_version=version_from or "unknown",
+            pr_branch=branch,
+            target_version=target_version or "unknown",
+            helmrelease_namespace=config.get("helmrelease_namespace", "traefik"),
+            helmrelease_name="traefik",
+            flux_namespace=config.get("flux_namespace", "flux-system"),
+            gitrepo_name=config.get("gitrepo_name", "flux-system"),
+            repo_path=config.get("repo_path"),
+            repo_url=repo_url,
+            ssh_key_path=config.get("ssh_key_path"),
+            k8s_context=k8s_context,
+            dry_run="true" if dry_run else "false",
+        )
+        result = subprocess.run(
+            [
+                "opencode",
+                "run",
+                "--dangerously-skip-permissions",
+                "true",
+                "-m",
+                "opencode/big-pickle",
+                f"Work per the instructions in {goal_path}",
+            ],
+            cwd=tempdir,
+            timeout=300,
+        )
+        logger.info(f"opencode run finished with exit code {result.returncode}")
+    finally:
+        shutil.rmtree(tempdir)
 
     poller.mark_pr_processed(pr_number)
 
@@ -300,7 +234,7 @@ def run_poll(config):
                 continue
 
             process_pr(
-                pr, config, flux_manager, poller, dry_run=config.get("dry_run", True)
+                pr, config, flux_manager, poller, dry_run=config.get("dry_run", False)
             )
 
     logger.info("Poll cycle complete")
@@ -309,50 +243,30 @@ def run_poll(config):
     return flux_manager
 
 
-flux_manager_global = None
-config_global = None
+def main():
+    import argparse
 
+    parser = argparse.ArgumentParser(description="Traefik Upgrade Poller")
+    parser.add_argument("--config", default=DEFAULT_CONFIG_PATH)
+    parser.add_argument("--run-once", action="store_true")
+    parser.add_argument("--dry-run", action="store_true", default=False)
+    parser.add_argument("--interval", type=int, default=300)
+    args = parser.parse_args()
 
-# def signal_handler(signum, frame):
-#     logger.info("Received Ctrl+C, reverting GitRepository to main branch...")
-#     if flux_manager_global:
-#         flux_manager_global.revert_to_main()
-#     sys.exit(0)
-
-
-@click.command()
-@click.option("--config", "-c", default=DEFAULT_CONFIG_PATH, help="Path to config file")
-@click.option("--run-once", is_flag=True, help="Run once and exit")
-@click.option(
-    "--dry-run/--no-dry-run", default=True, help="Dry-run mode (default: dry-run)"
-)
-@click.option(
-    "--interval", "-i", default=300, help="Poll interval in seconds (default: 300)"
-)
-def main(config, run_once, dry_run, interval):
-    # signal.signal(signal.SIGINT, signal_handler)
-
-    config_data = load_config(config)
-    config_data["dry_run"] = dry_run
-    config_data["poll_interval"] = interval
-
-    global flux_manager_global, config_global
-    config_global = config_data
+    config_data = load_config(args.config)
+    config_data["dry_run"] = args.dry_run
 
     logger.info(f"Starting Traefik Poller")
-    logger.info(f"  Config: {config}")
-    logger.info(f"  Dry-run: {dry_run}")
-    logger.info(f"  Run-once: {run_once}")
-    logger.info(f"  Interval: {interval}s")
+    logger.info(f"  Config: {args.config}")
+    logger.info(f"  Dry-run: {args.dry_run}")
+    logger.info(f"  Run-once: {args.run_once}")
+    logger.info(f"  Interval: {args.interval}s")
 
-    if run_once:
-        flux_manager_global = run_poll(config_data)
-    else:
-        flux_manager_global = run_poll(config_data)
+    flux_manager_global = run_poll(config_data)
 
-        schedule.every(interval).seconds.do(run_poll, config=config_data)
-
-        logger.info(f"Scheduling polls every {interval} seconds...")
+    if not args.run_once:
+        schedule.every(args.interval).seconds.do(run_poll, config=config_data)
+        logger.info(f"Scheduling polls every {args.interval} seconds...")
         while True:
             schedule.run_pending()
             time.sleep(1)

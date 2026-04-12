@@ -2,16 +2,100 @@ import pytest
 import time
 import subprocess
 import yaml
-from kubernetes import client
+from kubernetes import client, config
 
 
-pytestmark = pytest.mark.dependency(
-    depends=["test_helmrelease.py::test_helmrelease_reconciled"]
-)
+@pytest.fixture(scope="session")
+def kubeconfig():
+    try:
+        config.load_incluster_config()
+    except Exception:
+        try:
+            config.load_kube_config()
+        except Exception as e:
+            pytest.skip(f"Could not load kubeconfig: {e}")
+    return config
+
+
+@pytest.fixture(scope="session")
+def core_v1(kubeconfig):
+    return client.CoreV1Api()
+
+
+@pytest.fixture(scope="session")
+def custom_objects(kubeconfig):
+    return client.CustomObjectsApi()
+
+
+@pytest.fixture(scope="session")
+def namespace(request):
+    return request.config.getoption("--namespace")
+
+
+@pytest.fixture(scope="session")
+def helmrelease_name(request):
+    return request.config.getoption("--helmrelease")
+
+
+@pytest.fixture(scope="session")
+def helmrelease_namespace(request):
+    return request.config.getoption("--helmrelease-namespace")
+
+
+@pytest.fixture(scope="session")
+def traefik_service(core_v1, namespace):
+    try:
+        return core_v1.read_namespaced_service("traefik", namespace)
+    except client.ApiException as e:
+        if e.status == 404:
+            pytest.fail(f"Traefik service not found in namespace {namespace}")
+        raise
+
+
+@pytest.fixture(scope="session")
+def traefik_pods(core_v1, namespace):
+    pods = core_v1.list_namespaced_pod(
+        namespace=namespace, label_selector="app.kubernetes.io/name=traefik"
+    )
+    return pods.items
+
+
+def pytest_addoption(parser):
+    parser.addoption("--namespace", action="store", default="traefik")
+    parser.addoption("--helmrelease", action="store", default="traefik")
+    parser.addoption("--helmrelease-namespace", action="store", default="traefik")
+
+
+@pytest.mark.dependency(scope="session")
+def test_helmrelease_reconciled(
+    custom_objects, helmrelease_name="traefik", helmrelease_namespace="traefik"
+):
+    hr = custom_objects.get_namespaced_custom_object(
+        group="helm.toolkit.fluxcd.io",
+        version="v2",
+        plural="helmreleases",
+        namespace=helmrelease_namespace,
+        name=helmrelease_name,
+    )
+
+    conditions = hr.get("status", {}).get("conditions", [])
+    ready = any(
+        c.get("type") == "Ready" and c.get("status") == "True" for c in conditions
+    )
+
+    target_version = hr.get("spec", {}).get("chart", {}).get("spec", {}).get("version")
+    deployed_version = hr.get("status", {}).get("lastAttemptedRevision", "")
+
+    assert ready, f"HelmRelease not Ready. Conditions: {conditions}"
+    assert deployed_version, "No version in HelmRelease status"
+    assert deployed_version == target_version, (
+        f"Version mismatch: deployed={deployed_version}, target={target_version}"
+    )
+
+    print(f"[CHECK] HelmRelease '{helmrelease_name}' reconciled: {deployed_version}")
 
 
 def test_traefik_pods_running(traefik_pods):
-    """Verify Traefik pods are Running"""
     assert len(traefik_pods) > 0, "No Traefik pods found"
 
     for pod in traefik_pods:
@@ -23,7 +107,6 @@ def test_traefik_pods_running(traefik_pods):
 
 
 def test_traefik_service_exists(traefik_service):
-    """Verify Traefik service exists"""
     assert traefik_service is not None, "Traefik service not found"
     assert traefik_service.spec.type is not None, "Service type not set"
 
@@ -33,8 +116,6 @@ def test_traefik_service_exists(traefik_service):
 
 
 def test_traefik_responds(core_v1, namespace):
-    """Verify Traefik responds to requests by deploying a test app with Ingress"""
-
     test_app_name = "test-ingress-app"
     test_app_labels = {"app": test_app_name}
     test_namespace = namespace
@@ -170,20 +251,9 @@ def test_traefik_responds(core_v1, namespace):
         )
     finally:
         pass
-        # Cleanup commented out for debugging
-        # try:
-        #     apps_v1 = client.AppsV1Api()
-        #     core_v1 = client.CoreV1Api()
-        #     networking_v1 = client.NetworkingV1Api()
-        #     apps_v1.delete_namespaced_deployment(test_app_name, test_namespace)
-        #     core_v1.delete_namespaced_service(test_app_name, test_namespace)
-        #     networking_v1.delete_namespaced_ingress(f"{test_app_name}-ingress", test_namespace)
-        # except:
-        #     pass
 
 
 def test_traefik_has_ingress_class(core_v1, namespace):
-    """Verify Traefik has IngressClass configured"""
     networking_v1 = client.NetworkingV1Api()
 
     try:

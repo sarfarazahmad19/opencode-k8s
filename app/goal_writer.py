@@ -15,6 +15,7 @@ def write_goal(
     repo_url: str,
     ssh_key_path: str,
     k8s_context: str,
+    dry_run: str = "false",
 ) -> str:
     template_path = os.path.join(os.path.dirname(__file__), "GOAL.md.template")
 
@@ -34,6 +35,7 @@ def write_goal(
         repo_url=repo_url,
         ssh_key_path=ssh_key_path,
         k8s_context=k8s_context,
+        dry_run=dry_run,
     )
 
     goal_path = os.path.join(tempdir, "GOAL.md")
