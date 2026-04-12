@@ -11,7 +11,7 @@
 - repo_url: git@github.com:sarfarazahmad19/opencode-k8s.git
 - ssh_key_path: /home/ahmads/.ssh/id_rsa
 - k8s_context: kind-flux-cluster
-- dry_run: true
+- dry_run: false
 
 ## Context
 - Software: traefik
@@ -24,7 +24,7 @@
 - SSH key path: /home/ahmads/.ssh/id_rsa
 - Kubernetes context: kind-flux-cluster
 - Test coverage: All functionality is covered by the test suite in tests/
-- Dry-run mode: true
+- Dry-run mode: false
 
 ## Test Command
 uv run pytest tests/ --namespace=traefik --helmrelease-namespace=traefik
@@ -41,9 +41,9 @@ uv run pytest tests/ --namespace=traefik --helmrelease-namespace=traefik
    - git commit -m "fix: migrate values for traefik 39.0.7"
    - git push origin updatecli_main_25cae498eee0a0f01f59966ddce3cf228aa546404e37b9f9f67411da612957f1 (use SSH key at /home/ahmads/.ssh/id_rsa)
 8. If dry_run is false, force reconcile:
-   - Kustomization: patch with {"reconcile.fluxcd.io/force": "true"}
-   - HelmRelease: patch with {"reconcile.fluxcd.io/force": "true"}
-9. If dry_run is false, wait for HelmRelease Ready=True
+   - Kustomization: kubectl annotate kustomization flux-system -n flux-system reconcile.fluxcd.io/force=true --overwrite --context kind-flux-cluster
+   - HelmRelease: kubectl annotate helmrelease traefik -n traefik reconcile.fluxcd.io/force=true --overwrite --context kind-flux-cluster
+9. If dry_run is false, wait up to 30 seconds for HelmRelease Ready=True
 10. If dry_run is false, re-run tests to verify
 11. Write results to app/logs/opencode_result.json with format:
    {"success": true/false, "version": "x.y.z", "test_output": "..."}
