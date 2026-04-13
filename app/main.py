@@ -143,7 +143,13 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=False):
     flux_manager.force_helmrelease_reconciliation()
 
     logger.info("Waiting for generation to increment...")
-    flux_manager.wait_for_generation_increment(gen_from)
+    generation_incremented = flux_manager.wait_for_generation_increment(gen_from)
+    if not generation_incremented:
+        logger.error("Generation did not increment - version unchanged")
+        post_results_to_pr(
+            html_url, None, version=f"FAILED - version unchanged ({version_from})"
+        )
+        return
 
     target_version = flux_manager.get_current_version()
     k8s_context = subprocess.check_output(
