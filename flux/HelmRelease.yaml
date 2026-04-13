@@ -20,10 +20,10 @@ spec:
       replicas: 1
     service:
       type: ClusterIP
-  ports:
-    web:
-      http:
-        redirections:
-          entryPoint:
-            to: websecure
-            scheme: https
+    ports:
+      web:
+        http:
+          redirections:
+            entryPoint:
+              to: websecure
+              scheme: https
