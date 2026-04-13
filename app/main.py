@@ -208,6 +208,19 @@ def process_pr(pr_info, config, flux_manager, poller, dry_run=False):
     finally:
         shutil.rmtree(tempdir)
 
+    logger.info("Reverting GitRepository to main branch...")
+    flux_manager.update_gitrepository_branch("main", dry_run=False)
+    flux_manager.force_gitrepository_reconcile()
+
+    logger.info("Waiting for Kustomization to reconcile...")
+    flux_manager.wait_for_reconciliation(timeout_seconds=300)
+
+    logger.info("Reverting HelmRelease to main branch...")
+    flux_manager.force_helmrelease_reconciliation()
+
+    logger.info("Waiting for HelmRelease to reconcile...")
+    flux_manager.wait_for_helmrelease_ready(dry_run=False, timeout_seconds=300)
+
     poller.mark_pr_processed(pr_number)
 
 
